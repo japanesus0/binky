@@ -1,0 +1,64 @@
+name: binky
+description: Beverage tracking and brew timer.
+publish_to: 'none'
+# Format: <semver>+<integer build code>. Bump the build code for every Play
+# Store upload (Play rejects duplicate codes). versionName is what users see.
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+  flutter: '>=3.22.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  shared_preferences: ^2.2.3  # kept for one-shot migration to secure storage
+  flutter_secure_storage: ^9.2.2
+  audioplayers: ^6.1.0
+  share_plus: ^9.0.0
+  path_provider: ^2.1.3
+  file_picker: ^8.0.7  # pinned to stay compatible with share_plus 9.x's web dep
+  wakelock_plus: ^1.2.8
+  # Re-added for the one-shot completion alarm only. No ongoing notification,
+  # no per-channel custom sound, no exact-alarm requirement — the prior pain
+  # came from all three of those. See alarm.dart for the simplified config.
+  flutter_local_notifications: ^17.2.3
+  timezone: ^0.9.4
+  # Keeps the Dart isolate alive while a brew is running so our audioplayers
+  # code fires even when the device is locked. Adds a small persistent
+  # "Brew in progress" notification — Android requires it for foreground
+  # services.
+  flutter_foreground_task: ^8.10.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.1
+  flutter_native_splash: ^2.4.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/sounds/
+
+# Generate launcher icons by running:  dart run flutter_launcher_icons
+# Source images live in `assets/`. Replace icon.png / icon-foreground.png
+# with your real artwork later — the same command regenerates everything.
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#6B4423"
+  adaptive_icon_foreground: "assets/icon-foreground.png"
+
+# Native splash is color-only. The animated branded splash (bouncing "b" +
+# static "binky" wordmark) is drawn by lib/splash_screen.dart as soon as
+# Flutter takes over, so we don't show a static image first and then
+# discontinuously swap to an animated one.
+# Regenerate platform assets with: dart run flutter_native_splash:create
+flutter_native_splash:
+  color: "#6B4423"
+  android_12:
+    color: "#6B4423"

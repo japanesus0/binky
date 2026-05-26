@@ -1,0 +1,16 @@
+# Copy this file to `key.properties` (no .template) and fill in the values
+# below. The real key.properties is gitignored — never commit it.
+#
+# Generate the keystore once with:
+#
+#   keytool -genkey -v -keystore C:\path\to\binky-upload.jks ^
+#     -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+#
+# (use forward slashes if you prefer; on Windows either works in keytool)
+# Pick a long random password and STORE IT IN A PASSWORD MANAGER. If you lose
+# this keystore, you can no longer push updates to your Play Store listing.
+
+storePassword=your-keystore-password-here
+keyPassword=your-key-password-here
+keyAlias=upload
+storeFile=C:/path/to/binky-upload.jks

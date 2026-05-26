@@ -1,0 +1,27 @@
+# IDE state — re-derivable from the project, no reason to track.
+.idea/
+.vscode/
+
+# Claude Code per-project state and transcripts. Local only.
+.claude/
+
+# Stray source images at the repo root. The launcher icon source PNGs that
+# DO matter live under app/assets/ and app/android/.../res/ — those are
+# tracked normally.
+ChatGPT Image*.png
+
+# Private working document — Play Store deployment notes (keystore
+# generation walkthrough, build process, upload steps). Not for the
+# public repo; lives on your machine only. The user-facing User Guide
+# and Technical Reference docx ARE committed.
+Binky - Play Store Deployment Guide.docx
+
+# OS noise.
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Backup / temp files from various editors.
+*~
+*.bak
+*.swp
