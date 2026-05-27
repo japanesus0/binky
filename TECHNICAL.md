@@ -488,7 +488,6 @@ Bump `version` in [pubspec.yaml](app/pubspec.yaml) for every Play upload — the
 ## 16. Repo layout summary
 
 ```
-D:\ProjectFiles\Binky\binky\
 ├── PRIVACY_POLICY.md            ← public-facing, host before Play submission
 ├── PLAY_LISTING.md              ← copy-paste source for Play Console
 ├── TECHNICAL.md                 ← this file
