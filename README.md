@@ -80,4 +80,6 @@ For signing, copy `app/android/key.properties.template` to
 
 ## License
 
-Personal project. Not currently licensed for redistribution.
+[MIT](LICENSE) — do what you want with this code, just keep the copyright
+notice in any substantial copy or fork. The license includes the standard
+"no warranty" disclaimer.

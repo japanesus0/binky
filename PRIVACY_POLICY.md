@@ -84,4 +84,5 @@ be published at the same URL as this one, with an updated "Last updated" date.
 
 ## Contact
 
-For questions about this policy, contact: _your email address here_
+For questions about this policy, contact: app.binky@gmail.com
+
