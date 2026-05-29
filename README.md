@@ -3,6 +3,24 @@
 A small Android app for logging beverages and timing brews — tea, coffee,
 soda, water, whatever you drink. Everything stays on your device.
 
+## Documentation — start here
+
+Two guides cover everything about binky. Pick the one that matches you:
+
+| If you're... | Read this |
+|---|---|
+| **A user** — you want to understand every feature, every screen, every setting, and how to actually use the app | 📘 **[User Guide](binky%20-%20User%20Guide.docx)** |
+| **A developer** — you want to know how binky is built: the brew state machine, the two-isolate audio architecture, why audio focus is configured the way it is, the R8 / resource-shrinker fixes, the encrypted storage layer, every dependency choice | 📗 **[Technical Reference](binky%20-%20Technical%20Reference.docx)** |
+| **Mostly interested in privacy and what data the app touches** | 🔒 [PRIVACY_POLICY.md](PRIVACY_POLICY.md) |
+| **Looking at the Play Store listing copy** | 📝 [PLAY_LISTING.md](PLAY_LISTING.md) |
+
+> 📥 The User Guide and Technical Reference are Word documents — your browser
+> will download them when you click. Both are written to stand alone, so
+> read either one without needing context from the other. They cover the
+> ground from "what does the chart icon do" all the way to "why is the
+> foreground service's audio focus set to `gainTransientMayDuck` instead
+> of `gain`."
+
 ## What's in the box
 
 - **Five drink categories** (Hot Tea, Cold Tea, Coffee, Soda, Bog Standard
@@ -67,16 +85,6 @@ The release AAB lands in `build/app/outputs/bundle/release/app-release.aab`.
 For signing, copy `app/android/key.properties.template` to
 `app/android/key.properties` and fill in your keystore details. The
 `key.properties` file is gitignored.
-
-## Documentation
-
-- [User Guide](binky%20-%20User%20Guide.docx) — end-user walkthrough of
-  every screen and setting.
-- [Technical Reference](binky%20-%20Technical%20Reference.docx) — file-by-file
-  architecture, brew system internals, audio focus reasoning, R8 +
-  resource-shrinker fixes.
-- [PRIVACY_POLICY.md](PRIVACY_POLICY.md) — full privacy statement.
-- [PLAY_LISTING.md](PLAY_LISTING.md) — Play Store listing copy.
 
 ## License
 

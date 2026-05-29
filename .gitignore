@@ -12,8 +12,8 @@ ChatGPT Image*.png
 
 # Private working document — Play Store deployment notes (keystore
 # generation walkthrough, build process, upload steps). Not for the
-# public repo; lives on your machine only. The user-facing User Guide
-# and Technical Reference docx ARE committed.
+# public repo; lives on your machine only. The user-facing User Guide,
+# Technical Reference, and Tester Invitation docs ARE committed.
 Binky - Play Store Deployment Guide.docx
 
 # OS noise.
