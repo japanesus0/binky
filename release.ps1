@@ -52,11 +52,14 @@ if (-not (Test-Path "app/pubspec.yaml")) {
     Die "Run from the repo root (where app/pubspec.yaml lives)."
 }
 
-# 1. Working tree must be clean.
-Step 1 "Checking working tree is clean..."
-$dirty = git status --porcelain
+# 1. Working tree must be clean (tracked files only).
+#    Untracked files are ignored on purpose - they can't end up in a
+#    release because they're not in git. Only staged or modified tracked
+#    files would silently ride along, so those are what we gate on.
+Step 1 "Checking working tree is clean (tracked files only)..."
+$dirty = git status --porcelain --untracked-files=no
 if ($dirty) {
-    Write-Host "Uncommitted changes:" -ForegroundColor Yellow
+    Write-Host "Uncommitted changes to tracked files:" -ForegroundColor Yellow
     Write-Host $dirty
     Die "Working tree must be clean. Commit or stash first."
 }
