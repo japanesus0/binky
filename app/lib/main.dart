@@ -13,6 +13,14 @@ import 'storage.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Initialize the persistent diagnostic log FIRST so every subsequent
+  // event in this startup sequence — plugin init, storage migration,
+  // ActiveBrew rehydration — gets captured. If the app crashes mid-
+  // startup, the file is what tells us how far we got. Must come after
+  // ensureInitialized() (path_provider needs the binding) but before
+  // anything else.
+  await Diagnostics.init();
+
   // Init the foreground-task plugin. Done before anything else so the
   // service can be started from ActiveBrew on first brew without any
   // additional setup. The persistent-notification channel is configured
