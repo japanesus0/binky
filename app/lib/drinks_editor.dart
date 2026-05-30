@@ -243,8 +243,11 @@ class _DrinkFormScreenState extends State<_DrinkFormScreen> {
     _description = TextEditingController(text: d?.description ?? '');
 
     final catDef = categoryByName(cat);
+    final vols = d?.volumePresets ??
+        catDef?.volumePresets ??
+        const <double>[16.0];
     _volume = TextEditingController(
-      text: (d?.defaultVolume ?? catDef?.defaultVolume ?? 16).toStringAsFixed(0),
+      text: vols.map((v) => v.toStringAsFixed(0)).join(', '),
     );
     _brewTimes = TextEditingController(
       text: d == null
@@ -272,7 +275,9 @@ class _DrinkFormScreenState extends State<_DrinkFormScreen> {
     setState(() {
       _category = newCategory;
       if (isNew && catDef != null) {
-        _volume.text = catDef.defaultVolume.toStringAsFixed(0);
+        _volume.text = catDef.volumePresets
+            .map((v) => v.toStringAsFixed(0))
+            .join(', ');
         _brewable = catDef.brewable;
         _brewTimes.text = catDef.defaultBrewTimes.join(',');
       }
@@ -289,7 +294,19 @@ class _DrinkFormScreenState extends State<_DrinkFormScreen> {
       );
       return;
     }
-    final vol = double.tryParse(_volume.text) ?? 16.0;
+    // Volumes: parse the comma-separated input, drop empties / non-numbers
+    // / non-positives, cap at 3 entries. Fall back to a sensible single
+    // 16 oz default if the user blanked the field entirely.
+    final vols = _volume.text
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .map(double.tryParse)
+        .whereType<double>()
+        .where((n) => n > 0)
+        .take(3)
+        .toList();
+    if (vols.isEmpty) vols.add(16.0);
     final times = _brewable
         ? _brewTimes.text
             .split(',')
@@ -298,6 +315,7 @@ class _DrinkFormScreenState extends State<_DrinkFormScreen> {
             .map(int.tryParse)
             .whereType<int>()
             .where((n) => n > 0)
+            .take(3)
             .toList()
         : <int>[];
     final id = widget.drink?.id ?? DrinksStore.nextId();
@@ -307,7 +325,7 @@ class _DrinkFormScreenState extends State<_DrinkFormScreen> {
         id: id,
         type: _category,
         description: desc,
-        defaultVolume: vol,
+        volumePresets: vols,
         brewable: _brewable,
         brewTimes: times,
         isDefault: _isDefault,
@@ -407,7 +425,9 @@ class _DrinkFormScreenState extends State<_DrinkFormScreen> {
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
-                labelText: 'Default volume (oz)',
+                labelText: 'Volume presets (oz, comma-separated, max 3)',
+                hintText: '16, 12, 20',
+                helperText: 'First entry is the default. Max 3 entries.',
                 border: OutlineInputBorder(),
               ),
             ),

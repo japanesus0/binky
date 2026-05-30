@@ -119,7 +119,7 @@ class _OtherDrinkDialogState extends State<_OtherDrinkDialog> {
         id: DrinksStore.nextId(),
         type: cat.name,
         description: name,
-        defaultVolume: cat.defaultVolume,
+        volumePresets: List<double>.of(cat.volumePresets),
         brewable: cat.brewable,
         brewTimes: List<int>.of(cat.defaultBrewTimes),
       );
@@ -133,7 +133,7 @@ class _OtherDrinkDialogState extends State<_OtherDrinkDialog> {
         id: -DateTime.now().microsecondsSinceEpoch.remainder(0x7fffffff),
         type: cat.name,
         description: name,
-        defaultVolume: cat.defaultVolume,
+        volumePresets: List<double>.of(cat.volumePresets),
         brewable: cat.brewable,
         brewTimes: List<int>.of(cat.defaultBrewTimes),
       );
@@ -198,33 +198,39 @@ class DrinkScreen extends StatefulWidget {
 }
 
 class _DrinkScreenState extends State<DrinkScreen> {
-  late final TextEditingController _volume;
   late final TextEditingController _notes;
+  double? _selectedVolume;
+  bool _customVolume = false;
   int? _selectedBrew;
   bool _customBrew = false;
 
   @override
   void initState() {
     super.initState();
-    _volume = TextEditingController(
-      text: widget.drink.defaultVolume.toStringAsFixed(0),
-    );
     _notes = TextEditingController();
-    final positive = widget.drink.brewTimes.where((t) => t > 0).toList();
-    if (widget.drink.brewable && positive.isNotEmpty) {
-      _selectedBrew = positive.first;
+    // Volume: pre-select the first preset (the user's chosen default).
+    // If somehow the drink has no presets, leave null and force a Custom
+    // pick via the chip.
+    final positiveVols =
+        widget.drink.volumePresets.where((v) => v > 0).toList();
+    if (positiveVols.isNotEmpty) {
+      _selectedVolume = positiveVols.first;
+    }
+    // Brew time: same idea — pre-select the first positive preset.
+    final positiveBrews = widget.drink.brewTimes.where((t) => t > 0).toList();
+    if (widget.drink.brewable && positiveBrews.isNotEmpty) {
+      _selectedBrew = positiveBrews.first;
     }
   }
 
   @override
   void dispose() {
-    _volume.dispose();
     _notes.dispose();
     super.dispose();
   }
 
   Future<void> _logDrink() async {
-    final vol = double.tryParse(_volume.text) ?? widget.drink.defaultVolume;
+    final vol = _selectedVolume ?? widget.drink.defaultVolume;
     await LogStore.logDrink(
       drink: widget.drink,
       volume: vol,
@@ -237,6 +243,20 @@ class _DrinkScreenState extends State<DrinkScreen> {
       SnackBar(content: Text('Logged ${widget.drink.description}')),
     );
     Navigator.pop(context);
+  }
+
+  Future<void> _pickCustomVolume() async {
+    final picked = await showDialog<int>(
+      context: context,
+      builder: (_) =>
+          _CustomVolumeDialog(initial: _selectedVolume?.round() ?? 16),
+    );
+    if (picked != null && picked > 0) {
+      setState(() {
+        _selectedVolume = picked.toDouble();
+        _customVolume = true;
+      });
+    }
   }
 
   Future<void> _pickCustomBrew() async {
@@ -282,7 +302,7 @@ class _DrinkScreenState extends State<DrinkScreen> {
   Future<void> _startBrew(Drink d) async {
     if (!await _confirmReplaceIfRunning()) return;
     if (!mounted) return;
-    final vol = double.tryParse(_volume.text) ?? d.defaultVolume;
+    final vol = _selectedVolume ?? d.defaultVolume;
     await ActiveBrew.start(
       duration: Duration(minutes: _selectedBrew!),
       appBarTitle: 'Brewing ${d.description}',
@@ -334,7 +354,8 @@ class _DrinkScreenState extends State<DrinkScreen> {
   @override
   Widget build(BuildContext context) {
     final d = widget.drink;
-    final presets = d.brewTimes.where((t) => t > 0).toList();
+    final brewPresets = d.brewTimes.where((t) => t > 0).toList();
+    final volPresets = d.volumePresets.where((v) => v > 0).toList();
     final showBrew = d.brewable;
 
     return Scaffold(
@@ -346,14 +367,28 @@ class _DrinkScreenState extends State<DrinkScreen> {
           children: [
             Text(d.type, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 16),
-            TextField(
-              controller: _volume,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Volume (oz)',
-                border: OutlineInputBorder(),
-              ),
+            Text('Volume', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final v in volPresets)
+                  ChoiceChip(
+                    label: Text('${v.toStringAsFixed(0)} oz'),
+                    selected: !_customVolume && _selectedVolume == v,
+                    onSelected: (_) => setState(() {
+                      _selectedVolume = v;
+                      _customVolume = false;
+                    }),
+                  ),
+                ChoiceChip(
+                  label: Text(_customVolume && _selectedVolume != null
+                      ? 'Custom: ${_selectedVolume!.toStringAsFixed(0)} oz'
+                      : 'Custom…'),
+                  selected: _customVolume,
+                  onSelected: (_) => _pickCustomVolume(),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             if (showBrew) ...[
@@ -363,7 +398,7 @@ class _DrinkScreenState extends State<DrinkScreen> {
               Wrap(
                 spacing: 8,
                 children: [
-                  for (final t in presets)
+                  for (final t in brewPresets)
                     ChoiceChip(
                       label: Text('$t min'),
                       selected: !_customBrew && _selectedBrew == t,
@@ -420,6 +455,57 @@ class _DrinkScreenState extends State<DrinkScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CustomVolumeDialog extends StatefulWidget {
+  final int initial;
+  const _CustomVolumeDialog({required this.initial});
+
+  @override
+  State<_CustomVolumeDialog> createState() => _CustomVolumeDialogState();
+}
+
+class _CustomVolumeDialogState extends State<_CustomVolumeDialog> {
+  late double _ounces;
+
+  @override
+  void initState() {
+    super.initState();
+    _ounces = widget.initial.clamp(1, 64).toDouble();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final v = _ounces.round();
+    return AlertDialog(
+      title: const Text('Custom volume'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('$v oz',
+              style: Theme.of(context).textTheme.headlineMedium),
+          Slider(
+            value: _ounces,
+            min: 1,
+            max: 64,
+            divisions: 63,
+            label: '$v oz',
+            onChanged: (val) => setState(() => _ounces = val),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, v),
+          child: const Text('Use'),
+        ),
+      ],
     );
   }
 }

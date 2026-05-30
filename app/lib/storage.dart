@@ -98,52 +98,65 @@ class SecureStore {
 class DrinkCategory {
   final String name;
   final IconData icon;
-  final double defaultVolume;
+
+  /// Up to 3 sensible volume options for this category. Order matters: the
+  /// first entry is treated as the default by the DrinkScreen UI and by
+  /// quick-log. Per-sub-type [Drink] entries get their own [volumePresets]
+  /// (seeded from the category's at creation, then user-editable).
+  final List<double> volumePresets;
   final bool brewable;
   final List<int> defaultBrewTimes;
 
   const DrinkCategory({
     required this.name,
     required this.icon,
-    required this.defaultVolume,
+    required this.volumePresets,
     required this.brewable,
     required this.defaultBrewTimes,
   });
+
+  /// First entry of [volumePresets], with a 16 oz fallback if the list is
+  /// somehow empty (defensive — the const list above always has entries).
+  double get defaultVolume =>
+      volumePresets.isNotEmpty ? volumePresets.first : 16.0;
 }
 
 const drinkCategories = <DrinkCategory>[
   DrinkCategory(
     name: 'Hot Tea',
     icon: Icons.local_cafe,
-    defaultVolume: 16,
+    // 16 oz default (typical mug), 12 oz smaller cup, 20 oz large mug.
+    volumePresets: [16, 12, 20],
     brewable: true,
     defaultBrewTimes: [3, 5, 7],
   ),
   DrinkCategory(
     name: 'Cold Tea',
     icon: Icons.emoji_food_beverage,
-    defaultVolume: 20,
+    volumePresets: [20, 16, 24],
     brewable: false,
     defaultBrewTimes: [],
   ),
   DrinkCategory(
     name: 'Coffee',
     icon: Icons.coffee,
-    defaultVolume: 16,
+    // 16 oz "grande" default, 12 oz "tall", 8 oz cup.
+    volumePresets: [16, 12, 8],
     brewable: true,
     defaultBrewTimes: [1, 2, 3],
   ),
   DrinkCategory(
     name: 'Soda',
     icon: Icons.local_drink,
-    defaultVolume: 12,
+    // 12 oz can default, 16 oz bottle, 20 oz bottle.
+    volumePresets: [12, 16, 20],
     brewable: false,
     defaultBrewTimes: [],
   ),
   DrinkCategory(
     name: 'Bog Standard Water',
     icon: Icons.water_drop,
-    defaultVolume: 20,
+    volumePresets: [20, 16, 8],
     brewable: false,
     defaultBrewTimes: [],
   ),
@@ -165,7 +178,11 @@ class Drink {
   final int id;
   final String type;          // category name
   final String description;   // sub-type name (e.g. "Earl Grey")
-  final double defaultVolume;
+
+  /// 1-3 volume presets the user can pick from on the DrinkScreen. The
+  /// FIRST entry is the default (pre-selected chip; what quick-log uses).
+  /// Editing this via the drinks editor accepts a comma-separated list.
+  final List<double> volumePresets;
   final bool brewable;
   final List<int> brewTimes;
   final bool isDefault;       // pre-selected sub-type within its category
@@ -174,17 +191,25 @@ class Drink {
     required this.id,
     required this.type,
     required this.description,
-    required this.defaultVolume,
+    required this.volumePresets,
     required this.brewable,
     required this.brewTimes,
     this.isDefault = false,
   });
 
+  /// First entry of [volumePresets], or 16 oz as a defensive fallback if
+  /// the list is empty (which shouldn't happen — every constructor path
+  /// either accepts a non-empty list or seeds from the category defaults).
+  /// Lets call sites that just want "the default volume" stay short
+  /// instead of writing `d.volumePresets.first` everywhere.
+  double get defaultVolume =>
+      volumePresets.isNotEmpty ? volumePresets.first : 16.0;
+
   Drink copyWith({
     int? id,
     String? type,
     String? description,
-    double? defaultVolume,
+    List<double>? volumePresets,
     bool? brewable,
     List<int>? brewTimes,
     bool? isDefault,
@@ -193,7 +218,7 @@ class Drink {
         id: id ?? this.id,
         type: type ?? this.type,
         description: description ?? this.description,
-        defaultVolume: defaultVolume ?? this.defaultVolume,
+        volumePresets: volumePresets ?? this.volumePresets,
         brewable: brewable ?? this.brewable,
         brewTimes: brewTimes ?? this.brewTimes,
         isDefault: isDefault ?? this.isDefault,
@@ -203,42 +228,81 @@ class Drink {
         'id': id,
         'type': type,
         'desc': description,
-        'vol': defaultVolume,
+        'vols': volumePresets,
         'brew': brewable,
         'times': brewTimes,
         'def': isDefault,
       };
 
-  factory Drink.fromJson(Map<String, dynamic> j) => Drink(
-        id: j['id'] as int,
-        type: j['type'] as String,
-        description: j['desc'] as String,
-        defaultVolume: (j['vol'] as num).toDouble(),
-        brewable: j['brew'] as bool,
-        brewTimes: (j['times'] as List).cast<int>(),
-        isDefault: (j['def'] as bool?) ?? false,
-      );
+  factory Drink.fromJson(Map<String, dynamic> j) {
+    // Volume schema bridging: prefer the new list-shaped 'vols' field.
+    // For drinks_v2 entries upgraded in-place, only 'vol' (single) exists
+    // — wrap it in a one-item list so the user's existing default is
+    // preserved exactly. Final fallback (corrupt entry?) is 16 oz.
+    final List<double> vols;
+    if (j['vols'] is List) {
+      vols = (j['vols'] as List).map((e) => (e as num).toDouble()).toList();
+    } else if (j['vol'] != null) {
+      vols = [(j['vol'] as num).toDouble()];
+    } else {
+      vols = const [16.0];
+    }
+    return Drink(
+      id: j['id'] as int,
+      type: j['type'] as String,
+      description: j['desc'] as String,
+      volumePresets: vols,
+      brewable: j['brew'] as bool,
+      brewTimes: (j['times'] as List).cast<int>(),
+      isDefault: (j['def'] as bool?) ?? false,
+    );
+  }
 }
 
+// Seed list shipped on fresh installs. Each drink carries its own
+// volumePresets and brewTimes — picked to reflect how that specific
+// drink is typically served and brewed, NOT a one-size-fits-all default.
+//
+// Brew times in particular: green tea steeps short (oversteeping turns it
+// bitter), earl grey is the classic 5-minute black tea, ginger and herbal
+// medicinal teas (Breathe Easy) benefit from longer steeps.
 const _seedDrinks = <Drink>[
   // Hot Tea
-  Drink(id: 1, type: 'Hot Tea', description: 'Ginger', defaultVolume: 16, brewable: true, brewTimes: [3, 5, 7]),
-  Drink(id: 2, type: 'Hot Tea', description: 'Green Tea', defaultVolume: 16, brewable: true, brewTimes: [3, 5, 7], isDefault: true),
-  Drink(id: 3, type: 'Hot Tea', description: 'Earl Grey', defaultVolume: 16, brewable: true, brewTimes: [3, 5, 7]),
-  Drink(id: 4, type: 'Hot Tea', description: 'Breathe Easy', defaultVolume: 16, brewable: true, brewTimes: [3, 5, 7]),
+  Drink(id: 1, type: 'Hot Tea', description: 'Ginger',
+      volumePresets: [16, 12, 20], brewable: true, brewTimes: [5, 7, 10]),
+  Drink(id: 2, type: 'Hot Tea', description: 'Green Tea',
+      volumePresets: [12, 16, 8], brewable: true, brewTimes: [2, 3, 4],
+      isDefault: true),
+  Drink(id: 3, type: 'Hot Tea', description: 'Earl Grey',
+      volumePresets: [16, 12, 20], brewable: true, brewTimes: [4, 5, 6]),
+  Drink(id: 4, type: 'Hot Tea', description: 'Breathe Easy',
+      volumePresets: [16, 12, 20], brewable: true, brewTimes: [5, 7, 10]),
   // Cold Tea
-  Drink(id: 5, type: 'Cold Tea', description: 'Triple Berry', defaultVolume: 20, brewable: false, brewTimes: [], isDefault: true),
-  Drink(id: 6, type: 'Cold Tea', description: 'Iced Tea', defaultVolume: 20, brewable: false, brewTimes: []),
+  Drink(id: 5, type: 'Cold Tea', description: 'Triple Berry',
+      volumePresets: [20, 16, 24], brewable: false, brewTimes: [],
+      isDefault: true),
+  Drink(id: 6, type: 'Cold Tea', description: 'Iced Tea',
+      volumePresets: [20, 16, 24], brewable: false, brewTimes: []),
   // Coffee
-  Drink(id: 7, type: 'Coffee', description: 'Black', defaultVolume: 16, brewable: true, brewTimes: [1, 2, 3]),
-  Drink(id: 8, type: 'Coffee', description: 'Cream', defaultVolume: 16, brewable: true, brewTimes: [1, 2, 3]),
-  Drink(id: 9, type: 'Coffee', description: 'Cream & Sugar', defaultVolume: 16, brewable: true, brewTimes: [1, 2, 3], isDefault: true),
+  Drink(id: 7, type: 'Coffee', description: 'Black',
+      volumePresets: [16, 12, 8], brewable: true, brewTimes: [1, 2, 3]),
+  Drink(id: 8, type: 'Coffee', description: 'Cream',
+      volumePresets: [16, 12, 8], brewable: true, brewTimes: [1, 2, 3]),
+  Drink(id: 9, type: 'Coffee', description: 'Cream & Sugar',
+      volumePresets: [16, 12, 8], brewable: true, brewTimes: [1, 2, 3],
+      isDefault: true),
   // Soda
-  Drink(id: 10, type: 'Soda', description: 'Diet Coke', defaultVolume: 42, brewable: false, brewTimes: []),
-  Drink(id: 11, type: 'Soda', description: 'Diet Pepsi', defaultVolume: 12, brewable: false, brewTimes: [], isDefault: true),
-  Drink(id: 12, type: 'Soda', description: 'Fresca', defaultVolume: 12, brewable: false, brewTimes: []),
+  Drink(id: 10, type: 'Soda', description: 'Diet Coke',
+      volumePresets: [12, 16, 20], brewable: false, brewTimes: []),
+  Drink(id: 11, type: 'Soda', description: 'Diet Pepsi',
+      volumePresets: [12, 16, 20], brewable: false, brewTimes: [],
+      isDefault: true),
+  Drink(id: 12, type: 'Soda', description: 'Fresca',
+      volumePresets: [12, 16, 20], brewable: false, brewTimes: []),
   // Bog Standard Water
-  Drink(id: 13, type: 'Bog Standard Water', description: 'Water', defaultVolume: 20, brewable: false, brewTimes: [], isDefault: true),
+  Drink(id: 13, type: 'Bog Standard Water', description: 'Water',
+      volumePresets: [20, 16, 8], brewable: false, brewTimes: [],
+      isDefault: true),
 ];
 
 /// Reactive drinks list. Any screen that wants to follow drink changes can
@@ -247,19 +311,40 @@ final ValueNotifier<List<Drink>> drinksNotifier =
     ValueNotifier<List<Drink>>(const []);
 
 class DrinksStore {
-  // v2: introduces categories + isDefault. v1 (flat type/description list)
-  // is intentionally NOT migrated — users get a clean reseed.
-  static const _key = 'drinks_v2';
+  // v3: drinks gain a volumePresets list (1-3 oz values, first is default)
+  //     replacing the single defaultVolume scalar. One-shot upgrade from
+  //     v2 wraps each existing defaultVolume in a single-item list, so
+  //     the user's previously-chosen default is preserved exactly.
+  // v2: introduced categories + isDefault.
+  // v1: flat type/description list. Intentionally NOT migrated; that path
+  //     was abandoned long before v1.0.0 shipped.
+  static const _key = 'drinks_v3';
+  static const _legacyKey = 'drinks_v2';
 
   static Future<List<Drink>> load() async {
+    // 1. Current schema: drinks_v3
     final raw = await SecureStore.getString(_key);
     List<Drink> list;
-    if (raw == null) {
-      list = List<Drink>.of(_seedDrinks);
-      await _save(list);
-    } else {
+    if (raw != null) {
       final decoded = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
       list = decoded.map(Drink.fromJson).toList();
+    } else {
+      // 2. One-shot upgrade from drinks_v2 if a previous version of the
+      //    app left entries there. Drink.fromJson's volume bridging logic
+      //    wraps each v2 'vol' scalar into a single-item volumePresets
+      //    list, preserving every drink's existing default.
+      final legacy = await SecureStore.getString(_legacyKey);
+      if (legacy != null) {
+        final decoded =
+            (jsonDecode(legacy) as List).cast<Map<String, dynamic>>();
+        list = decoded.map(Drink.fromJson).toList();
+        await _save(list);
+        await SecureStore.remove(_legacyKey);
+      } else {
+        // 3. Fresh install — seed the canonical drinks list.
+        list = List<Drink>.of(_seedDrinks);
+        await _save(list);
+      }
     }
     drinksNotifier.value = List.unmodifiable(list);
     return list;
