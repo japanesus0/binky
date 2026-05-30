@@ -1,10 +1,9 @@
-name: binky
+﻿name: binky
 description: Beverage tracking and brew timer.
 publish_to: 'none'
 # Format: <semver>+<integer build code>. Bump the build code for every Play
 # Store upload (Play rejects duplicate codes). versionName is what users see.
-version: 1.0.0+3
-
+version: 1.0.0+4
 environment:
   sdk: '>=3.4.0 <4.0.0'
   flutter: '>=3.22.0'
@@ -20,13 +19,13 @@ dependencies:
   file_picker: ^8.0.7  # pinned to stay compatible with share_plus 9.x's web dep
   wakelock_plus: ^1.2.8
   # Re-added for the one-shot completion alarm only. No ongoing notification,
-  # no per-channel custom sound, no exact-alarm requirement — the prior pain
+  # no per-channel custom sound, no exact-alarm requirement â€” the prior pain
   # came from all three of those. See alarm.dart for the simplified config.
   flutter_local_notifications: ^17.2.3
   timezone: ^0.9.4
   # Keeps the Dart isolate alive while a brew is running so our audioplayers
   # code fires even when the device is locked. Adds a small persistent
-  # "Brew in progress" notification — Android requires it for foreground
+  # "Brew in progress" notification â€” Android requires it for foreground
   # services.
   flutter_foreground_task: ^8.10.0
 
@@ -44,7 +43,7 @@ flutter:
 
 # Generate launcher icons by running:  dart run flutter_launcher_icons
 # Source images live in `assets/`. Replace icon.png / icon-foreground.png
-# with your real artwork later — the same command regenerates everything.
+# with your real artwork later â€” the same command regenerates everything.
 flutter_launcher_icons:
   android: true
   ios: false
