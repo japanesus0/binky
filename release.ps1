@@ -1,9 +1,9 @@
-# release.ps1 — one-shot release pipeline for binky.
+# release.ps1 - one-shot release pipeline for binky.
 #
 # Usage (from the repo root, D:\ProjectFiles\Binky\binky\):
 #
 #   .\release.ps1            Builds locally end-to-end. Use this when
-#                            you DON'T have the GitHub Actions cloud build
+#                            you DO NOT have the GitHub Actions cloud build
 #                            configured (or you specifically want a local
 #                            AAB).
 #
@@ -13,7 +13,7 @@
 #                            .github/workflows/build.yml). Download the
 #                            resulting AAB from the Actions tab.
 #
-# What it does (each step gates on the previous succeeding — any failure
+# What it does (each step gates on the previous succeeding; any failure
 # stops the pipeline before pushing, so the repo never ends up in a
 # half-released state):
 #
@@ -26,6 +26,10 @@
 #
 # If the local build fails (step 4), the versionCode bump is reverted
 # automatically so you can re-run from a clean state.
+#
+# NOTE: this file is intentionally pure ASCII. Windows PowerShell 5.1
+# reads scripts without a BOM as Windows-1252; embedded em-dashes or
+# curly quotes get misdecoded and crash the parser.
 
 param(
     [switch]$NoBuild
@@ -43,7 +47,7 @@ function Die($msg) {
     exit 1
 }
 
-# 0. Sanity: we're at the project root.
+# 0. Sanity: we are at the project root.
 if (-not (Test-Path "app/pubspec.yaml")) {
     Die "Run from the repo root (where app/pubspec.yaml lives)."
 }
@@ -70,7 +74,7 @@ Step 3 "Bumping versionCode in app/pubspec.yaml..."
 $pubspecPath = "app/pubspec.yaml"
 $content = Get-Content $pubspecPath -Raw
 if ($content -notmatch '(?m)^version:\s+(\d+\.\d+\.\d+)\+(\d+)\s*$') {
-    Die "Couldn't find the 'version: X.Y.Z+N' line in pubspec.yaml"
+    Die "Could not find the 'version: X.Y.Z+N' line in pubspec.yaml"
 }
 $semver = $matches[1]
 $oldBuild = [int]$matches[2]
@@ -96,7 +100,7 @@ if (-not $NoBuild) {
     }
     catch {
         Pop-Location
-        Write-Host "Build failed — reverting versionCode bump..." -ForegroundColor Yellow
+        Write-Host "Build failed - reverting versionCode bump..." -ForegroundColor Yellow
         git checkout app/pubspec.yaml | Out-Null
         Die "Build pipeline failed: $($_.Exception.Message)"
     }
@@ -116,7 +120,7 @@ if ($LASTEXITCODE -ne 0) {
     Die "git push failed. Your local commit is fine; push manually with 'git push' once the issue is resolved."
 }
 
-# 6. Done — tell user where the AAB is (or where to find it).
+# 6. Done - tell user where the AAB is (or where to find it).
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Green
 Write-Host " Release ${newVersion} prepared on origin/main" -ForegroundColor Green
