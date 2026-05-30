@@ -100,11 +100,15 @@ class _BrewLifecycleSync extends WidgetsBindingObserver {
   _BrewLifecycleSync._();
 
   bool _installed = false;
+  AppLifecycleState? _lastLogged;
+
   void install() {
     if (_installed) return;
     _installed = true;
     WidgetsBinding.instance.addObserver(this);
-    _write(WidgetsBinding.instance.lifecycleState);
+    final initial = WidgetsBinding.instance.lifecycleState;
+    _logIfChanged(initial);
+    _write(initial);
   }
 
   void _write(AppLifecycleState? state) {
@@ -119,8 +123,23 @@ class _BrewLifecycleSync extends WidgetsBindingObserver {
     ).catchError((_) => false);
   }
 
+  /// Log lifecycle transitions to Diagnostics. Skip duplicate states
+  /// (Android occasionally re-fires the same state) to keep the log
+  /// readable. The persistent log makes these markers useful even after
+  /// a process kill — we can see e.g. that the app was paused, then
+  /// hours later launched into a "=== app launched ===" without ever
+  /// hitting "resumed", which would point at a launch-gate intercept.
+  void _logIfChanged(AppLifecycleState? state) {
+    if (state == null || state == _lastLogged) return;
+    _lastLogged = state;
+    Diagnostics.log('lifecycle: ${state.name}');
+  }
+
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) => _write(state);
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _logIfChanged(state);
+    _write(state);
+  }
 }
 
 class ActiveBrew {
