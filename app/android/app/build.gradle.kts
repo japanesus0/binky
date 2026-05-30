@@ -3,8 +3,15 @@ import java.io.FileInputStream
 
 plugins {
     id("com.android.application")
-    id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    // Kotlin is now auto-applied by the Flutter Gradle Plugin ("Built-in
+    // Kotlin"). Do NOT add `id("kotlin-android")` here — that pattern is
+    // deprecated and emits a build warning that future Flutter versions
+    // will turn into an error. See:
+    //   https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers
+    // The settings.gradle.kts still declares org.jetbrains.kotlin.android
+    // (with apply false) so plugins that haven't migrated yet — audioplayers,
+    // flutter_foreground_task, etc. — can still resolve their KGP dependency
+    // until they update.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
