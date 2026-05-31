@@ -74,53 +74,84 @@ class _SplashScreenState extends State<SplashScreen>
     return Scaffold(
       backgroundColor: _brown,
       body: SafeArea(
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Bouncing b — translates vertically. The decoration is a
-              // const subtree so AnimatedBuilder doesn't rebuild it per
-              // frame; only the Transform wrapper rebuilds.
-              AnimatedBuilder(
-                animation: _bounce,
-                builder: (_, child) => Transform.translate(
-                  offset: Offset(0, _bounce.value),
-                  child: child,
-                ),
-                child: Container(
-                  width: 160,
-                  height: 160,
-                  decoration: const BoxDecoration(
-                    color: _cream,
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
-                  child: const Text(
-                    'b',
-                    style: TextStyle(
-                      fontFamily: 'serif',
-                      fontSize: 120,
-                      fontWeight: FontWeight.bold,
-                      color: _brown,
-                      height: 1.0,
+        child: Stack(
+          children: [
+            // Logo + wordmark, centered. Same as before — using a Stack
+            // (rather than a single Column) so the bottom quote can be
+            // independently positioned without shifting the centered
+            // block.
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Bouncing b — translates vertically. The decoration is a
+                  // const subtree so AnimatedBuilder doesn't rebuild it per
+                  // frame; only the Transform wrapper rebuilds.
+                  AnimatedBuilder(
+                    animation: _bounce,
+                    builder: (_, child) => Transform.translate(
+                      offset: Offset(0, _bounce.value),
+                      child: child,
+                    ),
+                    child: Container(
+                      width: 160,
+                      height: 160,
+                      decoration: const BoxDecoration(
+                        color: _cream,
+                        shape: BoxShape.circle,
+                      ),
+                      alignment: Alignment.center,
+                      child: const Text(
+                        'b',
+                        style: TextStyle(
+                          fontFamily: 'serif',
+                          fontSize: 120,
+                          fontWeight: FontWeight.bold,
+                          color: _brown,
+                          height: 1.0,
+                        ),
+                      ),
                     ),
                   ),
+                  const SizedBox(height: 36),
+                  // Static wordmark — never moves.
+                  const Text(
+                    'binky',
+                    style: TextStyle(
+                      fontFamily: 'serif',
+                      fontSize: 56,
+                      fontWeight: FontWeight.bold,
+                      color: _cream,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Lower-bottom quote, right-aligned. Alignment (0, 0.70)
+            // places it about 85% down the screen — well into the
+            // bottom band but still comfortably above the SafeArea
+            // inset on tall phones. textAlign.right pulls both lines
+            // flush to the right edge of the padded box.
+            const Align(
+              alignment: Alignment(0, 0.70),
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 32),
+                child: Text(
+                  'Did I deserve to live today?\n -Geoffrey Lazer Ramsey',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontFamily: 'serif',
+                    fontStyle: FontStyle.italic,
+                    fontSize: 13.5,
+                    color: _cream,
+                    height: 1.5,
+                    letterSpacing: 0.3,
+                  ),
                 ),
               ),
-              const SizedBox(height: 36),
-              // Static wordmark — never moves.
-              const Text(
-                'binky',
-                style: TextStyle(
-                  fontFamily: 'serif',
-                  fontSize: 56,
-                  fontWeight: FontWeight.bold,
-                  color: _cream,
-                  letterSpacing: 2,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
