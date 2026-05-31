@@ -3,7 +3,7 @@ description: Beverage tracking and brew timer.
 publish_to: 'none'
 # Format: <semver>+<integer build code>. Bump the build code for every Play
 # Store upload (Play rejects duplicate codes). versionName is what users see.
-version: 1.0.0+7
+version: 1.0.0+8
 environment:
   sdk: '>=3.4.0 <4.0.0'
   flutter: '>=3.22.0'
