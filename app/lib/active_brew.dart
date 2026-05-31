@@ -430,7 +430,7 @@ class ActiveBrew {
           id: state.drinkIdToLog!,
           type: type ?? '?',
           description: description ?? state.appBarTitle,
-          defaultVolume: state.volume!,
+          volumePresets: [state.volume!],
           brewable: false,
           brewTimes: const [],
         );
