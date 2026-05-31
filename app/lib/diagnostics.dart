@@ -192,7 +192,10 @@ class DiagnosticsScreen extends StatelessWidget {
               );
               messenger.clearSnackBars();
               messenger.showSnackBar(
-                const SnackBar(content: Text('Log copied to clipboard.')),
+                const SnackBar(
+                  duration: Duration(seconds: 2),
+                  content: Text('Log copied to clipboard.'),
+                ),
               );
             },
           ),

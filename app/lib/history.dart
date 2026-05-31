@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'export.dart';
 import 'storage.dart';
@@ -50,8 +51,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     messenger.clearSnackBars();
-    messenger.showSnackBar(
+    // Workaround for Flutter issue #137163 — SnackBars with actions
+    // sometimes never dismiss. Schedule our own close as a backup.
+    const dismissAfter = Duration(seconds: 4);
+    final ctrl = messenger.showSnackBar(
       SnackBar(
+        duration: dismissAfter,
         content: Text('Deleted ${entry.description}'),
         action: SnackBarAction(
           label: 'Undo',
@@ -62,6 +67,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ),
       ),
     );
+    Future<void>.delayed(dismissAfter, () {
+      try { ctrl.close(); } catch (_) {}
+    }).ignore();
   }
 
   @override
@@ -82,7 +90,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
               } catch (e) {
                 messenger.clearSnackBars();
                 messenger.showSnackBar(
-                  SnackBar(content: Text('Export failed: $e')),
+                  SnackBar(
+                    duration: const Duration(seconds: 3),
+                    content: Text('Export failed: $e'),
+                  ),
                 );
               }
             },

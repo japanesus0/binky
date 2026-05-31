@@ -127,29 +127,51 @@ class HomeScreen extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     final defaultDrink = DrinksStore.defaultFor(cat.name);
     if (defaultDrink == null) {
+      Diagnostics.log(
+          'quick-log skipped: no default for category "${cat.name}"');
       messenger.clearSnackBars();
       messenger.showSnackBar(
         SnackBar(
-            content: Text(
-                'No ${cat.name} sub-types yet. Tap to open the category.')),
+          duration: const Duration(seconds: 2),
+          content: Text(
+              'No ${cat.name} sub-types yet. Tap to open the category.'),
+        ),
       );
       return;
     }
+    final vol = defaultDrink.defaultVolume;
     final entry = await LogStore.logDrink(
       drink: defaultDrink,
-      volume: defaultDrink.defaultVolume,
+      volume: vol,
     );
+    Diagnostics.log(
+        'quick-log (Home long-press): ${defaultDrink.description} '
+        '${vol.toStringAsFixed(0)} oz');
     messenger.clearSnackBars();
-    messenger.showSnackBar(
+    // Workaround for Flutter issue #137163: SnackBars with an action
+    // sometimes ignore `duration:` and stay forever — the framework's
+    // internal dismiss timer doesn't fire reliably. Schedule our own
+    // delayed close on the returned controller as a backup so the
+    // SnackBar always dismisses when we said it should.
+    const dismissAfter = Duration(seconds: 3);
+    final ctrl = messenger.showSnackBar(
       SnackBar(
+        duration: dismissAfter,
         content: Text('Logged ${defaultDrink.description} '
-            '(${defaultDrink.defaultVolume.toStringAsFixed(0)} oz)'),
+            '(${vol.toStringAsFixed(0)} oz)'),
         action: SnackBarAction(
           label: 'Undo',
-          onPressed: () => LogStore.delete(entry.id),
+          onPressed: () {
+            Diagnostics.log(
+                'quick-log UNDONE: ${defaultDrink.description}');
+            LogStore.delete(entry.id);
+          },
         ),
       ),
     );
+    Future<void>.delayed(dismissAfter, () {
+      try { ctrl.close(); } catch (_) {}
+    }).ignore();
   }
 
   @override

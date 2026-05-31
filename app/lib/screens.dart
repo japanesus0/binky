@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'active_brew.dart';
+import 'diagnostics.dart';
 import 'settings.dart';
 import 'storage.dart';
 
@@ -28,21 +29,35 @@ class CategoryScreen extends StatelessWidget {
 
   Future<void> _quickLog(BuildContext context, Drink d) async {
     final messenger = ScaffoldMessenger.of(context);
+    final vol = d.defaultVolume;
     final entry = await LogStore.logDrink(
       drink: d,
-      volume: d.defaultVolume,
+      volume: vol,
     );
+    Diagnostics.log(
+        'quick-log (CategoryScreen long-press): ${d.description} '
+        '${vol.toStringAsFixed(0)} oz');
     messenger.clearSnackBars();
-    messenger.showSnackBar(
+    // Workaround for Flutter issue #137163 — see main.dart for the full
+    // explanation. SnackBars with actions need an external dismiss timer.
+    const dismissAfter = Duration(seconds: 3);
+    final ctrl = messenger.showSnackBar(
       SnackBar(
+        duration: dismissAfter,
         content: Text('Logged ${d.description} '
-            '(${d.defaultVolume.toStringAsFixed(0)} oz)'),
+            '(${vol.toStringAsFixed(0)} oz)'),
         action: SnackBarAction(
           label: 'Undo',
-          onPressed: () => LogStore.delete(entry.id),
+          onPressed: () {
+            Diagnostics.log('quick-log UNDONE: ${d.description}');
+            LogStore.delete(entry.id);
+          },
         ),
       ),
     );
+    Future<void>.delayed(dismissAfter, () {
+      try { ctrl.close(); } catch (_) {}
+    }).ignore();
   }
 
   @override
@@ -236,11 +251,17 @@ class _DrinkScreenState extends State<DrinkScreen> {
       volume: vol,
       notes: _notes.text,
     );
+    Diagnostics.log(
+        'log (DrinkScreen): ${widget.drink.description} '
+        '${vol.toStringAsFixed(0)} oz');
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     messenger.clearSnackBars();
     messenger.showSnackBar(
-      SnackBar(content: Text('Logged ${widget.drink.description}')),
+      SnackBar(
+        duration: const Duration(seconds: 3),
+        content: Text('Logged ${widget.drink.description}'),
+      ),
     );
     Navigator.pop(context);
   }
@@ -346,7 +367,9 @@ class _DrinkScreenState extends State<DrinkScreen> {
       messenger.clearSnackBars();
       messenger.showSnackBar(
         SnackBar(
-            content: Text("Water's hot — ready to brew ${d.description}.")),
+          duration: const Duration(seconds: 3),
+          content: Text("Water's hot — ready to brew ${d.description}."),
+        ),
       );
     }
   }
