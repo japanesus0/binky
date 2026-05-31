@@ -16,12 +16,15 @@ final ValueNotifier<ThemeMode> themeModeNotifier =
 final ValueNotifier<int> kettleMinutesNotifier = ValueNotifier<int>(5);
 
 /// Controls whether [ActiveBrew] enables the keep-screen-on wake lock while
-/// a brew is running. Default true (matches the pre-toggle behavior — phone
-/// stays unlocked on the counter for kitchen-timer use). Off lets the
-/// screen auto-lock; the foreground service still fires the brew-complete
-/// audio either way.
+/// a brew is running. Default OFF — leaving an unlocked phone unattended on
+/// a counter is a real security risk and most users won't expect a timer
+/// app to suppress their lock screen by default. Users who want the
+/// kitchen-timer-on-the-counter behavior can opt in via Settings → Brew
+/// screen → "Keep screen on while brewing". The foreground service fires
+/// the brew-complete audio either way; this toggle only affects the
+/// screen-lock behavior.
 final ValueNotifier<bool> keepScreenOnDuringBrewNotifier =
-    ValueNotifier<bool>(true);
+    ValueNotifier<bool>(false);
 
 /// File path of the user-chosen custom alert sound, or null when the bundled
 /// default should be used. [Alarm] reads from this whenever it plays the
@@ -50,9 +53,12 @@ class Settings {
         (kettleStr != null ? int.tryParse(kettleStr) : null) ?? 5;
 
     final keepScreenStr = await SecureStore.getString(_keepScreenOnKey);
-    // Default true if unset (preserves pre-toggle behavior).
+    // Default OFF on fresh installs (security: don't suppress the lock
+    // screen by default). Existing installs preserve whatever the user
+    // last set — the SecureStore value persists across upgrades and
+    // takes precedence over this fallback.
     keepScreenOnDuringBrewNotifier.value =
-        keepScreenStr == null ? true : keepScreenStr == 'true';
+        keepScreenStr == null ? false : keepScreenStr == 'true';
 
     // Custom sound — only honor the path if the file is still on disk.
     final soundPath = await SecureStore.getString(_customSoundKey);
