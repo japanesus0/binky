@@ -9,17 +9,18 @@ Two guides cover everything about binky. Pick the one that matches you:
 
 | If you're... | Read this |
 |---|---|
-| **A user** — you want to understand every feature, every screen, every setting, and how to actually use the app | 📘 **[User Guide](binky%20-%20User%20Guide.docx)** |
-| **A developer** — you want to know how binky is built: the brew state machine, the two-isolate audio architecture, why audio focus is configured the way it is, the R8 / resource-shrinker fixes, the encrypted storage layer, every dependency choice | 📗 **[Technical Reference](binky%20-%20Technical%20Reference.docx)** |
+| **A user** — you want to understand every feature, every screen, every setting, and how to actually use the app | 📘 **[User Guide](binky%20-%20User%20Guide.pdf)** |
+| **A developer** — you want to know how binky is built: the brew state machine, the two-isolate audio architecture, why audio focus is configured the way it is, the R8 / resource-shrinker fixes, the encrypted storage layer, every dependency choice | 📗 **[Technical Reference](binky%20-%20Technical%20Reference.pdf)** |
 | **Mostly interested in privacy and what data the app touches** | 🔒 [PRIVACY_POLICY.md](PRIVACY_POLICY.md) |
 | **Looking at the Play Store listing copy** | 📝 [PLAY_LISTING.md](PLAY_LISTING.md) |
 
-> 📥 The User Guide and Technical Reference are Word documents — your browser
-> will download them when you click. Both are written to stand alone, so
-> read either one without needing context from the other. They cover the
-> ground from "what does the chart icon do" all the way to "why is the
-> foreground service's audio focus set to `gainTransientMayDuck` instead
-> of `gain`."
+> 📄 The User Guide and Technical Reference render directly in your browser
+> on GitHub — click and read, no download required. The original Word
+> documents are also tracked alongside the PDFs in `docs/` if you'd rather
+> open them in Word. Both stand alone, so read either one without needing
+> context from the other. They cover the ground from "what does the chart
+> icon do" all the way to "why is the foreground service's audio focus
+> set to `gainTransientMayDuck` instead of `gain`."
 
 ## What's in the box
 
