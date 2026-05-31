@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'storage.dart';
 
@@ -24,9 +25,12 @@ class DrinksEditorScreen extends StatelessWidget {
     } else if (result.deleted && existing != null) {
       await DrinksStore.remove(existing.id);
       messenger.clearSnackBars();
-      messenger.showSnackBar(
+      // Workaround for Flutter issue #137163 — SnackBars with actions
+      // sometimes never dismiss. Schedule our own close as a backup.
+      const dismissAfter = Duration(seconds: 4);
+      final ctrl = messenger.showSnackBar(
         SnackBar(
-          duration: const Duration(seconds: 4),
+          duration: dismissAfter,
           content: Text('Removed ${existing.description}'),
           action: SnackBarAction(
             label: 'Undo',
@@ -34,6 +38,9 @@ class DrinksEditorScreen extends StatelessWidget {
           ),
         ),
       );
+      Future<void>.delayed(dismissAfter, () {
+        try { ctrl.close(); } catch (_) {}
+      }).ignore();
     }
   }
 
@@ -41,9 +48,11 @@ class DrinksEditorScreen extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     await DrinksStore.remove(d.id);
     messenger.clearSnackBars();
-    messenger.showSnackBar(
+    // Workaround for Flutter issue #137163 — see comment in _edit.
+    const dismissAfter = Duration(seconds: 4);
+    final ctrl = messenger.showSnackBar(
       SnackBar(
-        duration: const Duration(seconds: 4),
+        duration: dismissAfter,
         content: Text('Removed ${d.description}'),
         action: SnackBarAction(
           label: 'Undo',
@@ -51,6 +60,9 @@ class DrinksEditorScreen extends StatelessWidget {
         ),
       ),
     );
+    Future<void>.delayed(dismissAfter, () {
+      try { ctrl.close(); } catch (_) {}
+    }).ignore();
   }
 
   Future<void> _newDrink(BuildContext context) async {

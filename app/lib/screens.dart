@@ -38,9 +38,12 @@ class CategoryScreen extends StatelessWidget {
         'quick-log (CategoryScreen long-press): ${d.description} '
         '${vol.toStringAsFixed(0)} oz');
     messenger.clearSnackBars();
-    messenger.showSnackBar(
+    // Workaround for Flutter issue #137163 — see main.dart for the full
+    // explanation. SnackBars with actions need an external dismiss timer.
+    const dismissAfter = Duration(seconds: 3);
+    final ctrl = messenger.showSnackBar(
       SnackBar(
-        duration: const Duration(seconds: 3),
+        duration: dismissAfter,
         content: Text('Logged ${d.description} '
             '(${vol.toStringAsFixed(0)} oz)'),
         action: SnackBarAction(
@@ -52,6 +55,9 @@ class CategoryScreen extends StatelessWidget {
         ),
       ),
     );
+    Future<void>.delayed(dismissAfter, () {
+      try { ctrl.close(); } catch (_) {}
+    }).ignore();
   }
 
   @override

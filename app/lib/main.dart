@@ -148,9 +148,15 @@ class HomeScreen extends StatelessWidget {
         'quick-log (Home long-press): ${defaultDrink.description} '
         '${vol.toStringAsFixed(0)} oz');
     messenger.clearSnackBars();
-    messenger.showSnackBar(
+    // Workaround for Flutter issue #137163: SnackBars with an action
+    // sometimes ignore `duration:` and stay forever — the framework's
+    // internal dismiss timer doesn't fire reliably. Schedule our own
+    // delayed close on the returned controller as a backup so the
+    // SnackBar always dismisses when we said it should.
+    const dismissAfter = Duration(seconds: 3);
+    final ctrl = messenger.showSnackBar(
       SnackBar(
-        duration: const Duration(seconds: 3),
+        duration: dismissAfter,
         content: Text('Logged ${defaultDrink.description} '
             '(${vol.toStringAsFixed(0)} oz)'),
         action: SnackBarAction(
@@ -163,6 +169,9 @@ class HomeScreen extends StatelessWidget {
         ),
       ),
     );
+    Future<void>.delayed(dismissAfter, () {
+      try { ctrl.close(); } catch (_) {}
+    }).ignore();
   }
 
   @override
