@@ -26,6 +26,7 @@ class DrinksEditorScreen extends StatelessWidget {
       messenger.clearSnackBars();
       messenger.showSnackBar(
         SnackBar(
+          duration: const Duration(seconds: 4),
           content: Text('Removed ${existing.description}'),
           action: SnackBarAction(
             label: 'Undo',
@@ -42,6 +43,7 @@ class DrinksEditorScreen extends StatelessWidget {
     messenger.clearSnackBars();
     messenger.showSnackBar(
       SnackBar(
+        duration: const Duration(seconds: 4),
         content: Text('Removed ${d.description}'),
         action: SnackBarAction(
           label: 'Undo',
@@ -290,7 +292,10 @@ class _DrinkFormScreenState extends State<_DrinkFormScreen> {
       final messenger = ScaffoldMessenger.of(context);
       messenger.clearSnackBars();
       messenger.showSnackBar(
-        const SnackBar(content: Text('Description is required.')),
+        const SnackBar(
+          duration: Duration(seconds: 2),
+          content: Text('Description is required.'),
+        ),
       );
       return;
     }

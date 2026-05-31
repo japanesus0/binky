@@ -123,7 +123,10 @@ class SettingsScreen extends StatelessWidget {
       if (bytes == null) {
         messenger.clearSnackBars();
         messenger.showSnackBar(
-          const SnackBar(content: Text('Could not read that audio file.')),
+          const SnackBar(
+            duration: Duration(seconds: 3),
+            content: Text('Could not read that audio file.'),
+          ),
         );
         return;
       }
@@ -148,11 +151,19 @@ class SettingsScreen extends StatelessWidget {
 
       messenger.clearSnackBars();
       messenger.showSnackBar(
-        SnackBar(content: Text('Using "${picked.name}" as the alert sound.')),
+        SnackBar(
+          duration: const Duration(seconds: 3),
+          content: Text('Using "${picked.name}" as the alert sound.'),
+        ),
       );
     } catch (e) {
       messenger.clearSnackBars();
-      messenger.showSnackBar(SnackBar(content: Text('Pick failed: $e')));
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 3),
+          content: Text('Pick failed: $e'),
+        ),
+      );
     }
   }
 
@@ -167,7 +178,10 @@ class SettingsScreen extends StatelessWidget {
     }
     messenger.clearSnackBars();
     messenger.showSnackBar(
-      const SnackBar(content: Text('Reverted to default alert sound.')),
+      const SnackBar(
+        duration: Duration(seconds: 2),
+        content: Text('Reverted to default alert sound.'),
+      ),
     );
   }
 

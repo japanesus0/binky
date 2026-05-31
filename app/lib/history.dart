@@ -52,6 +52,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     messenger.clearSnackBars();
     messenger.showSnackBar(
       SnackBar(
+        duration: const Duration(seconds: 4),
         content: Text('Deleted ${entry.description}'),
         action: SnackBarAction(
           label: 'Undo',
@@ -82,7 +83,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
               } catch (e) {
                 messenger.clearSnackBars();
                 messenger.showSnackBar(
-                  SnackBar(content: Text('Export failed: $e')),
+                  SnackBar(
+                    duration: const Duration(seconds: 3),
+                    content: Text('Export failed: $e'),
+                  ),
                 );
               }
             },

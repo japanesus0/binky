@@ -127,26 +127,39 @@ class HomeScreen extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     final defaultDrink = DrinksStore.defaultFor(cat.name);
     if (defaultDrink == null) {
+      Diagnostics.log(
+          'quick-log skipped: no default for category "${cat.name}"');
       messenger.clearSnackBars();
       messenger.showSnackBar(
         SnackBar(
-            content: Text(
-                'No ${cat.name} sub-types yet. Tap to open the category.')),
+          duration: const Duration(seconds: 2),
+          content: Text(
+              'No ${cat.name} sub-types yet. Tap to open the category.'),
+        ),
       );
       return;
     }
+    final vol = defaultDrink.defaultVolume;
     final entry = await LogStore.logDrink(
       drink: defaultDrink,
-      volume: defaultDrink.defaultVolume,
+      volume: vol,
     );
+    Diagnostics.log(
+        'quick-log (Home long-press): ${defaultDrink.description} '
+        '${vol.toStringAsFixed(0)} oz');
     messenger.clearSnackBars();
     messenger.showSnackBar(
       SnackBar(
+        duration: const Duration(seconds: 3),
         content: Text('Logged ${defaultDrink.description} '
-            '(${defaultDrink.defaultVolume.toStringAsFixed(0)} oz)'),
+            '(${vol.toStringAsFixed(0)} oz)'),
         action: SnackBarAction(
           label: 'Undo',
-          onPressed: () => LogStore.delete(entry.id),
+          onPressed: () {
+            Diagnostics.log(
+                'quick-log UNDONE: ${defaultDrink.description}');
+            LogStore.delete(entry.id);
+          },
         ),
       ),
     );
