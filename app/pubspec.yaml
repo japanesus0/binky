@@ -40,6 +40,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/sounds/
+    - assets/branding/
 
 # Generate launcher icons by running:  dart run flutter_launcher_icons
 # Source images live in `assets/`. Replace icon.png / icon-foreground.png

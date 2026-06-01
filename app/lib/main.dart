@@ -178,7 +178,14 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('binky'),
+        // Header lockup (wordmark + tagline + alarm-clock icon) replacing
+        // the plain "binky" text title. SizedBox caps the height so the
+        // image scales to fit the AppBar's toolbar area without pushing
+        // the bar taller; aspect ratio handles width naturally.
+        title: SizedBox(
+          height: 40,
+          child: Image.asset('assets/branding/header.png'),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.bar_chart),
