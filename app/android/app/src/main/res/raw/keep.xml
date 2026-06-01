@@ -3,10 +3,10 @@
   Tells Android's resource shrinker (enabled via `isShrinkResources = true`
   in app/build.gradle.kts) to preserve our notification-sound WAV.
   Without this, R8 strips the file because it can't see the runtime
-  reference (the plugin looks up `R.raw.brew_complete` via the string
-  "brew_complete" from Dart code), and OS notifications fail with:
-    PlatformException(invalid_sound, The resource brew_complete could
+  reference (the plugin looks up `R.raw.elle_and_lorelei` via the string
+  "elle_and_lorelei" from Dart code), and OS notifications fail with:
+    PlatformException(invalid_sound, The resource elle_and_lorelei could
     not be found...)
 -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@raw/brew_complete" />
+    tools:keep="@raw/elle_and_lorelei" />

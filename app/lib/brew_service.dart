@@ -119,7 +119,7 @@ class BrewTaskHandler extends TaskHandler {
       );
       final Source source = _customSoundPath != null && _customSoundPath!.isNotEmpty
           ? DeviceFileSource(_customSoundPath!)
-          : AssetSource('sounds/brew_complete.wav');
+          : AssetSource('sounds/elle_and_lorelei.wav');
       await player.play(source);
       // Give the sound 10s to finish before disposing the player.
       await Future.delayed(const Duration(seconds: 10));
