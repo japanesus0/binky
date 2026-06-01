@@ -129,24 +129,39 @@ class _SplashScreenState extends State<SplashScreen>
               ),
             ),
             // Upper-left personal "backdoor" — small status notes the
-            // author maintains about his daughters. Intentionally
+            // author maintains about his daughters. Names are bold;
+            // statuses ride along in regular weight. Intentionally
             // nominal in size and position so it reads as a quiet
-            // dedication caption, not a UI element. Update the strings
-            // here whenever the statuses change.
+            // dedication caption, not a UI element. Update the status
+            // strings here whenever they change.
             const Align(
               alignment: Alignment.topLeft,
               child: Padding(
                 padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: Text(
-                  'Elle: future college student (age 16)\n'
-                  'Lorelei: future state track champion, '
-                  'and future final stage unicorn (age 14)',
-                  style: TextStyle(
-                    fontFamily: 'sans-serif',
-                    fontSize: 8,
-                    color: _cream,
-                    height: 1.4,
-                    letterSpacing: 0.2,
+                child: Text.rich(
+                  TextSpan(
+                    style: TextStyle(
+                      fontFamily: 'sans-serif',
+                      fontSize: 8,
+                      color: _cream,
+                      height: 1.4,
+                      letterSpacing: 0.2,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: 'Elle',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(text: ': future college student (age 16)\n'),
+                      TextSpan(
+                        text: 'Lorelei',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(
+                        text: ': future state track champion, '
+                            'and future final stage unicorn (age 14)',
+                      ),
+                    ],
                   ),
                 ),
               ),
