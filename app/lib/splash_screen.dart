@@ -128,25 +128,38 @@ class _SplashScreenState extends State<SplashScreen>
                 ],
               ),
             ),
-            // Lower-bottom quote, right-aligned. Alignment (0, 0.70)
-            // places it about 85% down the screen — well into the
-            // bottom band but still comfortably above the SafeArea
-            // inset on tall phones. textAlign.right pulls both lines
-            // flush to the right edge of the padded box.
+            // Long-form quote pinned to the bottom of the SafeArea.
+            // Right-aligned non-italic sans-serif. Width-constrained to
+            // the rendered width of the "binky" wordmark above, so the
+            // quote's right edge lines up with the right edge of the "y"
+            // (not the screen edge). Explicit line breaks between each
+            // sentence so the rhythm reads as the rambling internal
+            // monologue it actually is, not disclaimer text.
+            // `sans-serif` resolves to Roboto on Android — the closest
+            // commonly-available approximation of Helvetica. Quote
+            // wording verified against the Regulation Podcast episode 92
+            // transcript (~1:18 in).
             const Align(
-              alignment: Alignment(0, 0.70),
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 32),
+              alignment: Alignment.bottomCenter,
+              child: SizedBox(
+                // Approximate width of the "binky" wordmark at fontSize 56
+                // serif bold + letterSpacing 2. Tune by eye if the right
+                // edge of the quote doesn't quite kiss the right edge of
+                // the "y" in your rendered build.
+                width: 180,
                 child: Text(
-                  'Did I deserve to live today?\n -Geoffrey Lazer Ramsey',
+                  'Did I deserve to live today or was I a waste of fucking space?\n'
+                  'Did I take oxygen and give nothing back to humanity?\n'
+                  'Should I have just not woken up this morning or did I do enough throughout the day to deserve my life?\n'
+                  'And I feel like everybody probably does that.\n'
+                  ' -Geoffrey Lazer Ramsey',
                   textAlign: TextAlign.right,
                   style: TextStyle(
-                    fontFamily: 'serif',
-                    fontStyle: FontStyle.italic,
-                    fontSize: 13.5,
+                    fontFamily: 'sans-serif',
+                    fontSize: 8,
                     color: _cream,
                     height: 1.5,
-                    letterSpacing: 0.3,
+                    letterSpacing: 0.2,
                   ),
                 ),
               ),
