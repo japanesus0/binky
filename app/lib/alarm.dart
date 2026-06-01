@@ -33,7 +33,7 @@ class Alarm {
   // Audio (in-app foreground)
   // ---------------------------------------------------------------------------
 
-  static const String _bundledAssetPath = 'sounds/brew_complete.wav';
+  static const String _bundledAssetPath = 'sounds/elle_and_lorelei.wav';
   static bool _audioContextReady = false;
 
   /// Explicitly resets the global audioplayers context.
@@ -173,8 +173,12 @@ class Alarm {
   // ---------------------------------------------------------------------------
 
   static final _plugin = FlutterLocalNotificationsPlugin();
-  static const _channelId = 'brew_complete_v8';
-  static const _channelName = 'Brew complete';
+  // Channel ID bumped from brew_complete_v8 to elle_and_lorelei_v1 so the
+  // rename takes effect on existing tester installs (Android caches the
+  // channel name/sound under the old ID once it's been created; the only
+  // way to surface the new name is a fresh channel).
+  static const _channelId = 'elle_and_lorelei_v1';
+  static const _channelName = 'Elle and Lorelei';
   static const _channelDesc = 'Plays a sound when a brew or kettle finishes.';
 
   /// Explicit channel sound. Without this, `playSound: true` relies on the
@@ -182,9 +186,9 @@ class Alarm {
   /// "None" / silent on a misconfigured device, producing zero audio for
   /// our notification. Binding our bundled WAV directly means the OS plays
   /// OUR sound regardless of the device's default-notification-sound
-  /// setting. (`brew_complete` resolves to res/raw/brew_complete.wav.)
+  /// setting. (`elle_and_lorelei` resolves to res/raw/elle_and_lorelei.wav.)
   static const AndroidNotificationSound _channelSound =
-      RawResourceAndroidNotificationSound('brew_complete');
+      RawResourceAndroidNotificationSound('elle_and_lorelei');
 
   /// Fixed id so reschedules replace, and cancel always works without
   /// tracking per-brew ids.
