@@ -128,75 +128,20 @@ class _SplashScreenState extends State<SplashScreen>
                 ],
               ),
             ),
-            // Upper-left personal "backdoor" — small status notes the
-            // author maintains about his daughters. Names are bold;
-            // statuses ride along in regular weight. Intentionally
-            // nominal in size and position so it reads as a quiet
-            // dedication caption, not a UI element. Update the status
-            // strings here whenever they change.
+            // Lower-left credits-style line. Small italic sans-serif so it
+            // reads as a quiet attribution rather than a UI element. The
+            // notification system is dedicated to the author's daughters.
             const Align(
-              alignment: Alignment.topLeft,
+              alignment: Alignment.bottomLeft,
               child: Padding(
-                padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: Text.rich(
-                  TextSpan(
-                    style: TextStyle(
-                      fontFamily: 'sans-serif',
-                      fontSize: 8,
-                      color: _cream,
-                      height: 1.4,
-                      letterSpacing: 0.2,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: 'Elle',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      TextSpan(text: ': future college student (age 16)\n'),
-                      TextSpan(
-                        text: 'Lorelei',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      TextSpan(
-                        text: ': future state track champion, '
-                            'and future final stage unicorn (age 14)',
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            // Long-form quote pinned to the bottom of the SafeArea.
-            // Right-aligned non-italic sans-serif. Width-constrained to
-            // the rendered width of the "binky" wordmark above, so the
-            // quote's right edge lines up with the right edge of the "y"
-            // (not the screen edge). Explicit line breaks between each
-            // sentence so the rhythm reads as the rambling internal
-            // monologue it actually is, not disclaimer text.
-            // `sans-serif` resolves to Roboto on Android — the closest
-            // commonly-available approximation of Helvetica. Quote
-            // wording verified against the Regulation Podcast episode 92
-            // transcript (~1:18 in).
-            const Align(
-              alignment: Alignment.bottomCenter,
-              child: SizedBox(
-                // Approximate width of the "binky" wordmark at fontSize 56
-                // serif bold + letterSpacing 2. Tune by eye if the right
-                // edge of the quote doesn't quite kiss the right edge of
-                // the "y" in your rendered build.
-                width: 180,
+                padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Text(
-                  'Did I deserve to live today or was I a waste of fucking space?\n'
-                  'Did I take oxygen and give nothing back to humanity?\n'
-                  'Should I have just not woken up this morning or did I do enough throughout the day to deserve my life?\n'
-                  'And I feel like everybody probably does that.\n'
-                  ' -Geoffrey Lazer Ramsey',
-                  textAlign: TextAlign.right,
+                  'Notifications brought to you by Elle and Lorelei!',
                   style: TextStyle(
                     fontFamily: 'sans-serif',
-                    fontSize: 8,
+                    fontStyle: FontStyle.italic,
+                    fontSize: 9,
                     color: _cream,
-                    height: 1.5,
                     letterSpacing: 0.2,
                   ),
                 ),
