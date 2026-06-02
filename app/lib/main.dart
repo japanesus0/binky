@@ -178,16 +178,13 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        // Branded wordmark in the AppBar title slot — serif bold matches
-        // the splash wordmark + launcher-icon `b` glyph for visual
-        // continuity across the brand surfaces.
+        // Branded but discrete — serif typeface for visual continuity
+        // with the splash wordmark and the launcher `b` glyph, but no
+        // bold weight or letter spacing so the AppBar reads quietly
+        // rather than asserting the brand at every screen entry.
         title: const Text(
           'binky',
-          style: TextStyle(
-            fontFamily: 'serif',
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1,
-          ),
+          style: TextStyle(fontFamily: 'serif'),
         ),
         actions: [
           IconButton(
