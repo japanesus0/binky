@@ -182,6 +182,16 @@ class HomeScreen extends StatelessWidget {
         // with the splash wordmark and the launcher `b` glyph, but no
         // bold weight or letter spacing so the AppBar reads quietly
         // rather than asserting the brand at every screen entry.
+        //
+        // Transparent surface (no background tint, no elevation, no
+        // scroll-under tint) so the bar reads as the page itself
+        // rather than as a distinct "logo banner" tile. The wordmark
+        // and action icons inherit theme foreground colors, so dark
+        // mode is handled automatically.
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
         title: const Text(
           'binky',
           style: TextStyle(fontFamily: 'serif'),
