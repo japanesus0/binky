@@ -178,7 +178,17 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('b'),
+        // Branded wordmark in the AppBar title slot — serif bold matches
+        // the splash wordmark + launcher-icon `b` glyph for visual
+        // continuity across the brand surfaces.
+        title: const Text(
+          'binky',
+          style: TextStyle(
+            fontFamily: 'serif',
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1,
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.bar_chart),
