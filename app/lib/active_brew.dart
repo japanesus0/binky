@@ -6,7 +6,10 @@ import 'alarm.dart';
 import 'brew_service.dart';
 import 'diagnostics.dart';
 import 'settings.dart'
-    show customAlertSoundPathNotifier, keepScreenOnDuringBrewNotifier;
+    show
+        alertGainNotifier,
+        customAlertSoundPathNotifier,
+        keepScreenOnDuringBrewNotifier;
 import 'storage.dart';
 
 /// Immutable snapshot of an active brew. The interesting state is in
@@ -181,6 +184,16 @@ class ActiveBrew {
           key: BrewServiceKeys.customSoundPath,
         );
       }
+      // Volume multiplier — round-trips through shared data because the
+      // service runs in a separate isolate. Read by BrewTaskHandler.onStart
+      // and applied via player.setVolume() in _fireExpiry. The service
+      // captures whatever the value is at brew-start; subsequent slider
+      // changes mid-brew don't retroactively apply (acceptable — typical
+      // brew is < 10 min and users rarely re-tune during one).
+      await FlutterForegroundTask.saveData(
+        key: BrewServiceKeys.alertGain,
+        value: alertGainNotifier.value.clamp(0.0, 1.0).toDouble(),
+      );
       final endTimeLabel =
           '${endsAt.hour.toString().padLeft(2, '0')}:${endsAt.minute.toString().padLeft(2, '0')}';
       final running = await FlutterForegroundTask.isRunningService;

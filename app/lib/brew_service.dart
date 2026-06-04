@@ -26,6 +26,14 @@ class BrewServiceKeys {
   /// audio so the user doesn't get a double ding when the app is open and
   /// unlocked at expiry.
   static const String mainIsolateResumed = 'main_isolate_resumed';
+
+  /// User-configured in-app alert volume multiplier (0.0 = mute, 1.0 = the
+  /// WAV's natural level). Written by the main isolate when the brew
+  /// service starts; the service reads it in onStart and applies it via
+  /// player.setVolume() at expiry. Cannot be a ValueNotifier in this
+  /// isolate — the service runs in its own Dart isolate with no shared
+  /// memory.
+  static const String alertGain = 'brew_alert_gain';
 }
 
 /// Runs in a SEPARATE isolate from the rest of the app. Cannot access
@@ -35,6 +43,11 @@ class BrewServiceKeys {
 class BrewTaskHandler extends TaskHandler {
   DateTime? _endsAt;
   String? _customSoundPath;
+  // Volume multiplier read from FlutterForegroundTask shared data at
+  // service start. Default 1.0 (no attenuation) — used both for fresh
+  // installs and as the failsafe on read errors. The main isolate writes
+  // this in ActiveBrew._startBrewService alongside customSoundPath.
+  double _alertGain = 1.0;
   bool _expiryFired = false;
 
   @override
@@ -46,6 +59,11 @@ class BrewTaskHandler extends TaskHandler {
     }
     _customSoundPath = await FlutterForegroundTask.getData<String>(
         key: BrewServiceKeys.customSoundPath);
+    final storedGain = await FlutterForegroundTask.getData<double>(
+        key: BrewServiceKeys.alertGain);
+    if (storedGain != null && storedGain.isFinite) {
+      _alertGain = storedGain.clamp(0.0, 1.0).toDouble();
+    }
   }
 
   @override
@@ -117,6 +135,12 @@ class BrewTaskHandler extends TaskHandler {
           ),
         ),
       );
+      // Apply the user-configured gain before play so the attack of the
+      // file doesn't blip at full volume. Non-fatal on failure — at worst
+      // we play at the player's default (1.0).
+      try {
+        await player.setVolume(_alertGain);
+      } catch (_) {/* swallow — gain is best-effort */}
       final Source source = _customSoundPath != null && _customSoundPath!.isNotEmpty
           ? DeviceFileSource(_customSoundPath!)
           : AssetSource('sounds/elle_and_lorelei.wav');

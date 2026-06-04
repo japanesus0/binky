@@ -32,11 +32,30 @@ final ValueNotifier<bool> keepScreenOnDuringBrewNotifier =
 final ValueNotifier<String?> customAlertSoundPathNotifier =
     ValueNotifier<String?>(null);
 
+/// Multiplier applied to the in-app brew-complete sound. Range 0.0 (muted)
+/// to 1.0 (the WAV's natural peak level). audioplayers' setVolume() caps
+/// at 1.0 on Android so we cannot software-amplify above unity — to make
+/// the alert genuinely louder, raise the file's own loudness in Audacity
+/// (or pick a louder custom sound) and leave this slider at 100%.
+///
+/// Applied in two places:
+///   - foreground path: `alarm.dart` _playSound() before player.play().
+///   - service-isolate path: `brew_service.dart` _fireExpiry() — the gain
+///     is round-tripped through FlutterForegroundTask.saveData under
+///     [BrewServiceKeys.alertGain] when the brew service starts.
+///
+/// The OS-scheduled completion notification (locked-app path) does NOT
+/// honor this — it plays at the device's notification-channel volume,
+/// independent of our slider. That's the right behavior: the OS-side
+/// volume is a system policy the user controls in Settings → Sound.
+final ValueNotifier<double> alertGainNotifier = ValueNotifier<double>(1.0);
+
 class Settings {
   static const _themeKey = 'theme_mode';
   static const _kettleKey = 'kettle_minutes';
   static const _customSoundKey = 'custom_alert_sound_path';
   static const _keepScreenOnKey = 'keep_screen_on_during_brew';
+  static const _alertGainKey = 'alert_gain';
 
   /// Loads all settings from encrypted storage into the notifiers above.
   /// Call once during app startup, after SecureStore migration, before the
@@ -71,6 +90,15 @@ class Settings {
         await SecureStore.remove(_customSoundKey);
       }
     }
+
+    // Alert gain. Default 1.0 on fresh installs (no attenuation). Parse
+    // defensively: any bad / out-of-range value falls back to full volume
+    // rather than e.g. accidentally muting the user.
+    final gainStr = await SecureStore.getString(_alertGainKey);
+    final parsedGain = gainStr != null ? double.tryParse(gainStr) : null;
+    alertGainNotifier.value = (parsedGain != null && parsedGain.isFinite)
+        ? parsedGain.clamp(0.0, 1.0).toDouble()
+        : 1.0;
   }
 
   static Future<void> setThemeMode(ThemeMode mode) async {
@@ -96,6 +124,12 @@ class Settings {
       await SecureStore.setString(_customSoundKey, path);
     }
     customAlertSoundPathNotifier.value = path;
+  }
+
+  static Future<void> setAlertGain(double value) async {
+    final clamped = value.clamp(0.0, 1.0).toDouble();
+    await SecureStore.setString(_alertGainKey, clamped.toString());
+    alertGainNotifier.value = clamped;
   }
 }
 
@@ -264,6 +298,50 @@ class SettingsScreen extends StatelessWidget {
                     ),
                     const Text(
                       'Used by the "Kettle Time" button on brewable drinks.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          const Divider(),
+          const _SectionHeader('Alert volume'),
+          ValueListenableBuilder<double>(
+            valueListenable: alertGainNotifier,
+            builder: (context, gain, _) {
+              final pct = (gain * 100).round();
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('In-app alert volume'),
+                        Text('$pct%',
+                            style: Theme.of(context).textTheme.titleMedium),
+                      ],
+                    ),
+                    Slider(
+                      value: gain,
+                      min: 0.0,
+                      max: 1.0,
+                      divisions: 20,
+                      label: '$pct%',
+                      onChanged: (v) => Settings.setAlertGain(v),
+                      onChangeEnd: (_) => Alarm.playPreview(),
+                    ),
+                    const Text(
+                      'Multiplier on the brew-complete sound played by the '
+                      'app and the brew foreground service. 100% is the '
+                      "file's natural level; lower it for quieter contexts. "
+                      'For louder than 100%, raise the file gain itself or '
+                      'pick a louder custom sound below. The OS notification '
+                      "that fires when the phone is locked rides the device's "
+                      'notification-channel volume and is not affected by '
+                      'this slider.',
                       style: TextStyle(fontSize: 12),
                     ),
                   ],

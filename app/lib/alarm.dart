@@ -148,8 +148,21 @@ class Alarm {
         }).catchError((_) {/* swallow */}),
       );
 
+      // User-configured attenuation. audioplayers caps setVolume at 1.0 on
+      // Android so this is a pure attenuator — the WAV's own loudness
+      // ceiling sets the maximum perceived volume. Set BEFORE play() to
+      // avoid a momentary full-volume blip at the attack of the file.
+      final gain = alertGainNotifier.value.clamp(0.0, 1.0).toDouble();
+      try {
+        await player.setVolume(gain);
+      } catch (e) {
+        // Non-fatal — volume just stays at the player's default (1.0).
+        Diagnostics.log('_playSound: setVolume($gain) failed: $e');
+      }
+
       await player.play(source).timeout(const Duration(seconds: 2));
-      Diagnostics.log('_playSound: play() returned successfully');
+      Diagnostics.log(
+          '_playSound: play() returned successfully (gain=${(gain * 100).round()}%)');
     } catch (e, st) {
       Diagnostics.log('_playSound FAILED: $e');
       if (kDebugMode) debugPrint('$st');
@@ -173,11 +186,18 @@ class Alarm {
   // ---------------------------------------------------------------------------
 
   static final _plugin = FlutterLocalNotificationsPlugin();
-  // Channel ID bumped from brew_complete_v8 to elle_and_lorelei_v1 so the
-  // rename takes effect on existing tester installs (Android caches the
-  // channel name/sound under the old ID once it's been created; the only
-  // way to surface the new name is a fresh channel).
-  static const _channelId = 'elle_and_lorelei_v1';
+  // Channel ID bumped to elle_and_lorelei_v2 because the WAV file was
+  // re-rendered louder (Audacity loudness pass — see the file-side gain
+  // change shipped alongside the in-app gain slider). Android caches the
+  // sound URI per channel ID forever once created — without bumping the
+  // ID, existing testers' devices would keep playing the OLD quieter file
+  // on the OS-locked path (the in-app foreground path reads from the
+  // asset bundle every play, so it picks up the new file immediately
+  // regardless of channel ID). v1 → v2 forces a fresh channel.
+  //
+  // History: brew_complete_v8 → elle_and_lorelei_v1 (rename + dedication).
+  // elle_and_lorelei_v1 → elle_and_lorelei_v2 (file re-rendered louder).
+  static const _channelId = 'elle_and_lorelei_v2';
   static const _channelName = 'Elle and Lorelei';
   static const _channelDesc = 'Plays a sound when a brew or kettle finishes.';
 
