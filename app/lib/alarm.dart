@@ -79,21 +79,71 @@ class Alarm {
     }
   }
 
-  /// Fires sound + haptics. Sound starts and is awaited (so haptic platform
-  /// calls don't wrest audio focus before playback is established), then
-  /// three haptic pulses follow.
-  static Future<void> foregroundAlert() async {
-    Diagnostics.log('foregroundAlert begin');
-    await _playSound();
-    HapticFeedback.heavyImpact();
-    await Future.delayed(const Duration(milliseconds: 250));
-    HapticFeedback.heavyImpact();
-    await Future.delayed(const Duration(milliseconds: 250));
-    HapticFeedback.heavyImpact();
-    Diagnostics.log('foregroundAlert done (3 haptic pulses fired)');
+  /// Set by [abortAlert] when the user dismisses an active brew while a
+  /// multi-rep alert loop is in flight. Each cycle of the loop checks
+  /// this between steps and bails early. Reset to false at the start of
+  /// every [foregroundAlert] call so a stale dismiss can't poison a
+  /// future alert.
+  static bool _abortAlert = false;
+
+  /// Tell any in-flight [foregroundAlert] to stop after its current
+  /// step. Called by [ActiveBrew.stop]/[ActiveBrew.complete] so a Done
+  /// or Cancel tap halts the dinging immediately rather than making the
+  /// user wait through the remaining reps. Service-isolate audio cannot
+  /// be aborted from here (different isolate, no shared memory); in
+  /// practice that doesn't matter because the service only fires the
+  /// alert when the main isolate is paused, and the user can't tap
+  /// Done from outside the app.
+  static void abortAlert() {
+    _abortAlert = true;
   }
 
-  /// Preview play used by the Settings test button.
+  /// Fires the alert pattern N times in succession, where N is the
+  /// user's [alertRepetitionsNotifier] setting (clamped 1–10). Each
+  /// cycle is: audio start, then three 250ms-spaced haptic pulses
+  /// overlapping the audio playback, then a short tail before the next
+  /// cycle starts. _playSound() returns once playback STARTS (not when
+  /// it ends), so the haptics overlap the audio rather than queueing
+  /// after it — that's the same pattern we used pre-rep-loop, just
+  /// repeated.
+  static Future<void> foregroundAlert() async {
+    _abortAlert = false;
+    final reps = alertRepetitionsNotifier.value.clamp(1, 10);
+    Diagnostics.log('foregroundAlert begin (reps=$reps)');
+    for (int i = 0; i < reps; i++) {
+      if (_abortAlert) {
+        Diagnostics.log('foregroundAlert aborted at rep ${i + 1}/$reps');
+        return;
+      }
+      if (i > 0) {
+        // Inter-cycle gap. With a ~760ms WAV and 500ms of haptics
+        // overlap, the previous ding is finishing right about now;
+        // this 400ms gap gives a clear "ding ... ding" rhythm rather
+        // than a continuous noise.
+        await Future.delayed(const Duration(milliseconds: 400));
+        if (_abortAlert) return;
+      }
+      await _playSound();
+      HapticFeedback.heavyImpact();
+      await Future.delayed(const Duration(milliseconds: 250));
+      if (_abortAlert) return;
+      HapticFeedback.heavyImpact();
+      await Future.delayed(const Duration(milliseconds: 250));
+      if (_abortAlert) return;
+      HapticFeedback.heavyImpact();
+      // Tail: gives the audio time to finish before the next cycle's
+      // _playSound() disposes the still-playing player (which would
+      // cut the sound off abruptly).
+      await Future.delayed(const Duration(milliseconds: 300));
+    }
+    Diagnostics.log('foregroundAlert done ($reps reps fired)');
+  }
+
+  /// Preview play used by the Settings test button. Plays once,
+  /// regardless of the reps setting — this exists for the
+  /// custom-sound preview where you just want to hear the file. Use
+  /// the "Simulate brew-complete alert" diagnostic button instead if
+  /// you want to audition the full N-rep alert rhythm.
   static Future<void> playPreview() {
     Diagnostics.log('Settings: preview play tapped');
     return _playSound();
@@ -148,21 +198,8 @@ class Alarm {
         }).catchError((_) {/* swallow */}),
       );
 
-      // User-configured attenuation. audioplayers caps setVolume at 1.0 on
-      // Android so this is a pure attenuator — the WAV's own loudness
-      // ceiling sets the maximum perceived volume. Set BEFORE play() to
-      // avoid a momentary full-volume blip at the attack of the file.
-      final gain = alertGainNotifier.value.clamp(0.0, 1.0).toDouble();
-      try {
-        await player.setVolume(gain);
-      } catch (e) {
-        // Non-fatal — volume just stays at the player's default (1.0).
-        Diagnostics.log('_playSound: setVolume($gain) failed: $e');
-      }
-
       await player.play(source).timeout(const Duration(seconds: 2));
-      Diagnostics.log(
-          '_playSound: play() returned successfully (gain=${(gain * 100).round()}%)');
+      Diagnostics.log('_playSound: play() returned successfully');
     } catch (e, st) {
       Diagnostics.log('_playSound FAILED: $e');
       if (kDebugMode) debugPrint('$st');
@@ -210,9 +247,14 @@ class Alarm {
   static const AndroidNotificationSound _channelSound =
       RawResourceAndroidNotificationSound('elle_and_lorelei');
 
-  /// Fixed id so reschedules replace, and cancel always works without
-  /// tracking per-brew ids.
+  /// Base id for scheduled completion notifications. The N-repetition
+  /// scheduler fans out across ids [_completionNotificationId ..
+  /// _completionNotificationId + _maxAlertReps - 1] — one per ding,
+  /// each scheduled 1 second after the previous. Cancellation sweeps
+  /// the whole range so changes to the reps setting between brews
+  /// can't leave stale alerts queued under higher indices.
   static const int _completionNotificationId = 9001;
+  static const int _maxAlertReps = 10;
 
   static bool _osInitialized = false;
 
@@ -245,11 +287,17 @@ class Alarm {
     } catch (_) {/* best effort */}
   }
 
-  /// Schedule the OS-side completion notification for [when]. Idempotent —
-  /// uses a fixed notification id, so rescheduling replaces. Inexact
-  /// scheduling: no exact-alarm permission required, drift is typically
-  /// seconds (worst case ~15 min on heavily throttled devices). Good
-  /// enough for a brew timer.
+  /// Schedule the OS-side completion notification(s) for [when]. Fans
+  /// out the user's repetitions setting (1–10) into a stack of
+  /// individual notifications, each 1 second after the previous. Each
+  /// rings the channel sound; the Android system groups stacked
+  /// entries in the shade. Idempotent within a single brew: cancel
+  /// before reschedule via [cancelScheduledCompletion] if you need to
+  /// rebuild the stack with new timing.
+  ///
+  /// Inexact scheduling: no exact-alarm permission required, drift is
+  /// typically seconds (worst case ~15 min on heavily throttled
+  /// devices). Good enough for a brew timer.
   static Future<void> scheduleCompletion({
     required String title,
     required String body,
@@ -257,33 +305,38 @@ class Alarm {
   }) async {
     try {
       await _ensureOsInit();
-      final tzWhen = tz.TZDateTime.fromMillisecondsSinceEpoch(
-        tz.UTC,
-        when.toUtc().millisecondsSinceEpoch,
-      );
-      await _plugin.zonedSchedule(
-        _completionNotificationId,
-        title,
-        body,
-        tzWhen,
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            _channelId,
-            _channelName,
-            channelDescription: _channelDesc,
-            importance: Importance.high,
-            priority: Priority.high,
-            category: AndroidNotificationCategory.reminder,
-            playSound: true,
-            sound: _channelSound,
-            enableVibration: true,
+      final reps = alertRepetitionsNotifier.value.clamp(1, _maxAlertReps);
+      for (int i = 0; i < reps; i++) {
+        final repWhen = when.add(Duration(seconds: i));
+        final tzWhen = tz.TZDateTime.fromMillisecondsSinceEpoch(
+          tz.UTC,
+          repWhen.toUtc().millisecondsSinceEpoch,
+        );
+        await _plugin.zonedSchedule(
+          _completionNotificationId + i,
+          title,
+          body,
+          tzWhen,
+          const NotificationDetails(
+            android: AndroidNotificationDetails(
+              _channelId,
+              _channelName,
+              channelDescription: _channelDesc,
+              importance: Importance.high,
+              priority: Priority.high,
+              category: AndroidNotificationCategory.reminder,
+              playSound: true,
+              sound: _channelSound,
+              enableVibration: true,
+            ),
           ),
-        ),
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-      );
-      Diagnostics.log('OS notif scheduled for $when');
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+        );
+      }
+      Diagnostics.log(
+          'OS notif scheduled for $when ($reps rep${reps == 1 ? '' : 's'})');
     } catch (e) {
       Diagnostics.log('OS notif schedule FAILED: $e');
     }
@@ -294,6 +347,11 @@ class Alarm {
   /// in isolation, without waiting for a brew. If you tap this and hear
   /// nothing, the device's notification path is the source of silence
   /// (channel sound stripped, DND, volume, etc.) — NOT our app code.
+  ///
+  /// Fires a SINGLE notification regardless of the user's repetitions
+  /// setting — this exists to verify the OS sound path works at all,
+  /// not to audition the full rep stack. The simulate-in-app diagnostic
+  /// button covers the rep rhythm via the in-app loop.
   static Future<void> testFireCompletionNotification() async {
     try {
       await _ensureOsInit();
@@ -321,16 +379,22 @@ class Alarm {
     }
   }
 
-  /// Cancel the scheduled completion notification if one is pending. If the
-  /// notification has already fired and the user hasn't dismissed it, this
-  /// removes it from the shade.
+  /// Cancel the entire scheduled completion stack — sweeps all
+  /// [_maxAlertReps] ids even if the current setting is lower, so a
+  /// reduction in reps between brews can't leave stale alerts queued
+  /// under higher indices. Cancel on a non-existent id is a no-op in
+  /// flutter_local_notifications, so the extra cancels are free.
   static Future<void> cancelScheduledCompletion() async {
     try {
       await _ensureOsInit();
-      await _plugin
-          .cancel(_completionNotificationId)
-          .timeout(const Duration(seconds: 2));
-      Diagnostics.log('OS notif cancelled');
+      for (int i = 0; i < _maxAlertReps; i++) {
+        try {
+          await _plugin
+              .cancel(_completionNotificationId + i)
+              .timeout(const Duration(seconds: 2));
+        } catch (_) {/* swallow per-id — keep sweeping */}
+      }
+      Diagnostics.log('OS notif stack cancelled (ids cleared)');
     } catch (e) {
       Diagnostics.log('OS notif cancel FAILED: $e');
     }

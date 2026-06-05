@@ -7,7 +7,7 @@ import 'brew_service.dart';
 import 'diagnostics.dart';
 import 'settings.dart'
     show
-        alertGainNotifier,
+        alertRepetitionsNotifier,
         customAlertSoundPathNotifier,
         keepScreenOnDuringBrewNotifier;
 import 'storage.dart';
@@ -184,15 +184,15 @@ class ActiveBrew {
           key: BrewServiceKeys.customSoundPath,
         );
       }
-      // Volume multiplier — round-trips through shared data because the
+      // Repetition count — round-trips through shared data because the
       // service runs in a separate isolate. Read by BrewTaskHandler.onStart
-      // and applied via player.setVolume() in _fireExpiry. The service
-      // captures whatever the value is at brew-start; subsequent slider
-      // changes mid-brew don't retroactively apply (acceptable — typical
-      // brew is < 10 min and users rarely re-tune during one).
+      // and used to drive the loop in _fireExpiry. The service captures
+      // whatever the value is at brew-start; subsequent slider changes
+      // mid-brew don't retroactively apply (acceptable — typical brew is
+      // < 10 min and users rarely re-tune during one).
       await FlutterForegroundTask.saveData(
-        key: BrewServiceKeys.alertGain,
-        value: alertGainNotifier.value.clamp(0.0, 1.0).toDouble(),
+        key: BrewServiceKeys.alertRepetitions,
+        value: alertRepetitionsNotifier.value.clamp(1, 10),
       );
       final endTimeLabel =
           '${endsAt.hour.toString().padLeft(2, '0')}:${endsAt.minute.toString().padLeft(2, '0')}';
@@ -406,6 +406,11 @@ class ActiveBrew {
     // next brew. Resetting here would let any in-flight Timer tick
     // re-fire handleExpiry between this line and the state clear below
     // — the very race that produced "double ding".
+    //
+    // Tell any in-flight multi-rep alert loop to stop after its current
+    // step — user dismissed, they don't want to wait through 9 more
+    // dings to get the screen back.
+    Alarm.abortAlert();
     Alarm.cancelScheduledCompletion();
     await _stopBrewService();
     await _persist(null);
@@ -455,6 +460,7 @@ class ActiveBrew {
       } catch (_) {/* don't trap user in expired brew if log write fails */}
     }
 
+    Alarm.abortAlert();
     Alarm.cancelScheduledCompletion();
     await _stopBrewService();
     await _persist(null);

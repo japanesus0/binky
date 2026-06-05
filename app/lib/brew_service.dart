@@ -27,13 +27,13 @@ class BrewServiceKeys {
   /// unlocked at expiry.
   static const String mainIsolateResumed = 'main_isolate_resumed';
 
-  /// User-configured in-app alert volume multiplier (0.0 = mute, 1.0 = the
-  /// WAV's natural level). Written by the main isolate when the brew
-  /// service starts; the service reads it in onStart and applies it via
-  /// player.setVolume() at expiry. Cannot be a ValueNotifier in this
-  /// isolate — the service runs in its own Dart isolate with no shared
-  /// memory.
-  static const String alertGain = 'brew_alert_gain';
+  /// User-configured number of times the brew-complete alert should
+  /// fire in succession (1–10). Written by the main isolate when the
+  /// brew service starts; the service reads it in onStart and uses it
+  /// to drive the loop in [BrewTaskHandler._fireExpiry]. Cannot be a
+  /// ValueNotifier in this isolate — the service runs in its own Dart
+  /// isolate with no shared memory.
+  static const String alertRepetitions = 'brew_alert_repetitions';
 }
 
 /// Runs in a SEPARATE isolate from the rest of the app. Cannot access
@@ -43,11 +43,11 @@ class BrewServiceKeys {
 class BrewTaskHandler extends TaskHandler {
   DateTime? _endsAt;
   String? _customSoundPath;
-  // Volume multiplier read from FlutterForegroundTask shared data at
-  // service start. Default 1.0 (no attenuation) — used both for fresh
-  // installs and as the failsafe on read errors. The main isolate writes
-  // this in ActiveBrew._startBrewService alongside customSoundPath.
-  double _alertGain = 1.0;
+  // Repetitions read from FlutterForegroundTask shared data at service
+  // start. Default 2 — matches the default in Settings, used as the
+  // failsafe on read failure or fresh installs. Range clamped 1–10 to
+  // stay in sync with the slider.
+  int _alertReps = 2;
   bool _expiryFired = false;
 
   @override
@@ -59,10 +59,10 @@ class BrewTaskHandler extends TaskHandler {
     }
     _customSoundPath = await FlutterForegroundTask.getData<String>(
         key: BrewServiceKeys.customSoundPath);
-    final storedGain = await FlutterForegroundTask.getData<double>(
-        key: BrewServiceKeys.alertGain);
-    if (storedGain != null && storedGain.isFinite) {
-      _alertGain = storedGain.clamp(0.0, 1.0).toDouble();
+    final storedReps = await FlutterForegroundTask.getData<int>(
+        key: BrewServiceKeys.alertRepetitions);
+    if (storedReps != null) {
+      _alertReps = storedReps.clamp(1, 10);
     }
   }
 
@@ -102,30 +102,19 @@ class BrewTaskHandler extends TaskHandler {
     // was already alerted (suppresses an in-app double ding on unlock).
     FlutterForegroundTask.sendDataToMain('brew_expired');
 
-    // Vibrate. HapticFeedback is available in background isolates because
-    // services.dart's MethodChannel works as long as we've initialized the
-    // binding (FlutterForegroundTask does this for us).
-    HapticFeedback.heavyImpact();
-    await Future.delayed(const Duration(milliseconds: 250));
-    HapticFeedback.heavyImpact();
-    await Future.delayed(const Duration(milliseconds: 250));
-    HapticFeedback.heavyImpact();
-
-    // Play the brew-complete sound. Each call uses a fresh AudioPlayer so
-    // there's no carried-over audio focus state — same pattern as the
-    // main-isolate audio path in alarm.dart.
-    final player = AudioPlayer();
+    // Audio focus: set context ONCE up front rather than per rep — it's
+    // process-global state, so setting it inside the loop just wastes
+    // calls. gainTransientMayDuck = "ask other audio (the user's music)
+    // to lower volume briefly, then release focus and they auto-resume."
+    // Plain `gain` would take permanent focus and the music app would
+    // NOT auto-resume — see the May 2026 "music override" bug.
+    //
+    // usage stays on MEDIA (not NOTIFICATION) — the notification stream
+    // is frequently silenced on real devices, which makes our ding
+    // inaudible even though play() succeeds. Media rides whatever
+    // volume the user is hearing music on. See alarm.dart's matching
+    // comment for the full reasoning.
     try {
-      // Audio focus: gainTransientMayDuck = "ask other audio (e.g. the
-      // user's music) to lower its volume briefly, then we'll release
-      // focus and they go back to full volume." Using plain `gain` would
-      // take permanent focus and the music app would NOT auto-resume.
-      //
-      // usage stays on MEDIA (not NOTIFICATION) — the notification stream
-      // is frequently silenced on real devices, which makes our ding
-      // inaudible even though play() succeeds. Media rides whatever
-      // volume the user is hearing music on. See alarm.dart's matching
-      // comment for the full reasoning.
       await AudioPlayer.global.setAudioContext(
         AudioContext(
           android: const AudioContextAndroid(
@@ -135,22 +124,44 @@ class BrewTaskHandler extends TaskHandler {
           ),
         ),
       );
-      // Apply the user-configured gain before play so the attack of the
-      // file doesn't blip at full volume. Non-fatal on failure — at worst
-      // we play at the player's default (1.0).
+    } catch (_) {/* best effort */}
+
+    final reps = _alertReps.clamp(1, 10);
+    final Source source = _customSoundPath != null &&
+            _customSoundPath!.isNotEmpty
+        ? DeviceFileSource(_customSoundPath!)
+        : AssetSource('sounds/elle_and_lorelei.wav');
+
+    for (int i = 0; i < reps; i++) {
+      if (i > 0) {
+        await Future.delayed(const Duration(milliseconds: 400));
+      }
+
+      // Vibrate. HapticFeedback is available in background isolates
+      // because services.dart's MethodChannel works as long as we've
+      // initialized the binding (FlutterForegroundTask does that).
+      HapticFeedback.heavyImpact();
+      await Future.delayed(const Duration(milliseconds: 250));
+      HapticFeedback.heavyImpact();
+      await Future.delayed(const Duration(milliseconds: 250));
+      HapticFeedback.heavyImpact();
+
+      // Play the brew-complete sound. Each rep gets a fresh AudioPlayer
+      // so there's no carried-over audio focus state — same pattern as
+      // the main-isolate audio path in alarm.dart.
+      final player = AudioPlayer();
       try {
-        await player.setVolume(_alertGain);
-      } catch (_) {/* swallow — gain is best-effort */}
-      final Source source = _customSoundPath != null && _customSoundPath!.isNotEmpty
-          ? DeviceFileSource(_customSoundPath!)
-          : AssetSource('sounds/elle_and_lorelei.wav');
-      await player.play(source);
-      // Give the sound 10s to finish before disposing the player.
-      await Future.delayed(const Duration(seconds: 10));
-    } catch (_) {
-      // best effort — service must stop regardless
-    } finally {
-      try { await player.dispose(); } catch (_) {}
+        await player.play(source);
+        // Give the file (~760ms) time to finish before the next rep
+        // disposes/replaces it. Conservative ~800ms keeps the cycle
+        // tight without truncating the tail.
+        await Future.delayed(const Duration(milliseconds: 800));
+      } catch (_) {
+        // best effort — keep iterating so a single bad play doesn't
+        // swallow the whole stack
+      } finally {
+        try { await player.dispose(); } catch (_) {}
+      }
     }
 
     // Update the foreground notification text + stop the service.

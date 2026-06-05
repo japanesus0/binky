@@ -32,30 +32,50 @@ final ValueNotifier<bool> keepScreenOnDuringBrewNotifier =
 final ValueNotifier<String?> customAlertSoundPathNotifier =
     ValueNotifier<String?>(null);
 
-/// Multiplier applied to the in-app brew-complete sound. Range 0.0 (muted)
-/// to 1.0 (the WAV's natural peak level). audioplayers' setVolume() caps
-/// at 1.0 on Android so we cannot software-amplify above unity — to make
-/// the alert genuinely louder, raise the file's own loudness in Audacity
-/// (or pick a louder custom sound) and leave this slider at 100%.
+/// Number of times the brew-complete alert plays in succession when a
+/// brew expires. Range 1–10, default 2.
 ///
-/// Applied in two places:
-///   - foreground path: `alarm.dart` _playSound() before player.play().
-///   - service-isolate path: `brew_service.dart` _fireExpiry() — the gain
-///     is round-tripped through FlutterForegroundTask.saveData under
-///     [BrewServiceKeys.alertGain] when the brew service starts.
+/// Repetition is the practical knob for "make sure the user notices" —
+/// raising raw loudness has hard limits (audioplayers.setVolume caps at
+/// 1.0; software amplification past the file's natural peak just clips
+/// the waveform), and a single ding is easy to miss in a noisy or
+/// distracted context. Playing the same ding 2–3 times in a row catches
+/// attention reliably without distortion.
 ///
-/// The OS-scheduled completion notification (locked-app path) does NOT
-/// honor this — it plays at the device's notification-channel volume,
-/// independent of our slider. That's the right behavior: the OS-side
-/// volume is a system policy the user controls in Settings → Sound.
-final ValueNotifier<double> alertGainNotifier = ValueNotifier<double>(1.0);
+/// Applied in all three alert paths:
+///   - foreground path: alarm.dart foregroundAlert() loops N times with
+///     a short gap between cycles. Each cycle is audio + 3 haptic
+///     pulses, matching the original single-ding pattern.
+///   - service-isolate path: brew_service.dart _fireExpiry() loops the
+///     same audio+haptic cycle. Reps round-trip through
+///     FlutterForegroundTask.saveData under
+///     [BrewServiceKeys.alertRepetitions] at brew start.
+///   - OS-scheduled completion notification: alarm.dart scheduleCompletion
+///     schedules N stacked notifications 1 second apart (base id +
+///     iteration index). The device's notification channel rings each
+///     one. Cancellation sweeps all 10 possible ids regardless of
+///     current setting so changes mid-brew can't leak stale alerts.
+///
+/// Mid-loop dismissal: when the user taps Done/Cancel on an active brew,
+/// ActiveBrew calls Alarm.abortAlert() which sets a flag the foreground
+/// loop checks between cycles. The service-isolate loop cannot be
+/// aborted from outside (different isolate, no shared memory), but in
+/// practice the user can only dismiss from inside the resumed app, in
+/// which case the in-app guard already prevented the service from
+/// firing in the first place.
+final ValueNotifier<int> alertRepetitionsNotifier = ValueNotifier<int>(2);
 
 class Settings {
   static const _themeKey = 'theme_mode';
   static const _kettleKey = 'kettle_minutes';
   static const _customSoundKey = 'custom_alert_sound_path';
   static const _keepScreenOnKey = 'keep_screen_on_during_brew';
-  static const _alertGainKey = 'alert_gain';
+  static const _alertRepsKey = 'alert_repetitions';
+  // Deprecated key from an earlier closed-test build (50–150% gain
+  // slider that pre-amplified PCM). Removed on load so persisted
+  // installs don't carry dead bytes; safe to delete this constant once
+  // closed test cycles past the boost-slider release.
+  static const _deprecatedAlertGainKey = 'alert_gain';
 
   /// Loads all settings from encrypted storage into the notifiers above.
   /// Call once during app startup, after SecureStore migration, before the
@@ -91,14 +111,16 @@ class Settings {
       }
     }
 
-    // Alert gain. Default 1.0 on fresh installs (no attenuation). Parse
-    // defensively: any bad / out-of-range value falls back to full volume
-    // rather than e.g. accidentally muting the user.
-    final gainStr = await SecureStore.getString(_alertGainKey);
-    final parsedGain = gainStr != null ? double.tryParse(gainStr) : null;
-    alertGainNotifier.value = (parsedGain != null && parsedGain.isFinite)
-        ? parsedGain.clamp(0.0, 1.0).toDouble()
-        : 1.0;
+    // Alert repetitions. Default 2 on fresh installs — one ding is
+    // easy to miss; two is the cheapest "I notice it" without being
+    // pushy. Clamped 1–10. Bad/missing values silently fall back to
+    // the default rather than failing loudly.
+    final repsStr = await SecureStore.getString(_alertRepsKey);
+    final parsedReps = repsStr != null ? int.tryParse(repsStr) : null;
+    alertRepetitionsNotifier.value =
+        (parsedReps != null) ? parsedReps.clamp(1, 10) : 2;
+    // Clean up the deprecated boost-slider key. No-op if absent.
+    await SecureStore.remove(_deprecatedAlertGainKey);
   }
 
   static Future<void> setThemeMode(ThemeMode mode) async {
@@ -126,10 +148,10 @@ class Settings {
     customAlertSoundPathNotifier.value = path;
   }
 
-  static Future<void> setAlertGain(double value) async {
-    final clamped = value.clamp(0.0, 1.0).toDouble();
-    await SecureStore.setString(_alertGainKey, clamped.toString());
-    alertGainNotifier.value = clamped;
+  static Future<void> setAlertRepetitions(int value) async {
+    final clamped = value.clamp(1, 10);
+    await SecureStore.setString(_alertRepsKey, clamped.toString());
+    alertRepetitionsNotifier.value = clamped;
   }
 }
 
@@ -306,11 +328,10 @@ class SettingsScreen extends StatelessWidget {
             },
           ),
           const Divider(),
-          const _SectionHeader('Alert volume'),
-          ValueListenableBuilder<double>(
-            valueListenable: alertGainNotifier,
-            builder: (context, gain, _) {
-              final pct = (gain * 100).round();
+          const _SectionHeader('Alert repetitions'),
+          ValueListenableBuilder<int>(
+            valueListenable: alertRepetitionsNotifier,
+            builder: (context, reps, _) {
               return Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                 child: Column(
@@ -319,30 +340,24 @@ class SettingsScreen extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('In-app alert volume'),
-                        Text('$pct%',
+                        const Text('Times to ding'),
+                        Text(reps == 1 ? '1 time' : '$reps times',
                             style: Theme.of(context).textTheme.titleMedium),
                       ],
                     ),
+                    // Integer slider 1–10, 9 divisions for 10 stops.
+                    // No preview-on-release — the existing
+                    // "Simulate brew-complete alert" button below in
+                    // Diagnostics fires the full N-repetition pattern
+                    // and is the right place to audition the rhythm.
                     Slider(
-                      value: gain,
-                      min: 0.0,
-                      max: 1.0,
-                      divisions: 20,
-                      label: '$pct%',
-                      onChanged: (v) => Settings.setAlertGain(v),
-                      onChangeEnd: (_) => Alarm.playPreview(),
-                    ),
-                    const Text(
-                      'Multiplier on the brew-complete sound played by the '
-                      'app and the brew foreground service. 100% is the '
-                      "file's natural level; lower it for quieter contexts. "
-                      'For louder than 100%, raise the file gain itself or '
-                      'pick a louder custom sound below. The OS notification '
-                      "that fires when the phone is locked rides the device's "
-                      'notification-channel volume and is not affected by '
-                      'this slider.',
-                      style: TextStyle(fontSize: 12),
+                      value: reps.toDouble(),
+                      min: 1,
+                      max: 10,
+                      divisions: 9,
+                      label: '$reps',
+                      onChanged: (v) =>
+                          Settings.setAlertRepetitions(v.round()),
                     ),
                   ],
                 ),
