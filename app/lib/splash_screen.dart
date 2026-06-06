@@ -128,21 +128,30 @@ class _SplashScreenState extends State<SplashScreen>
                 ],
               ),
             ),
-            // Lower-left credits-style line. Small italic sans-serif so it
-            // reads as a quiet attribution rather than a UI element. The
-            // notification system is dedicated to the author's daughters.
+            // Lower-left credits-style line. Small upright sans-serif —
+            // "Powered by" bold to read as the label, the names that
+            // follow in regular weight to read as the attribution. The
+            // brew-complete notification system is dedicated to the
+            // author's daughters; this is its public credit.
             const Align(
               alignment: Alignment.bottomLeft,
               child: Padding(
                 padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text(
-                  'Notifications brought to you by Elle and Lorelei!',
-                  style: TextStyle(
-                    fontFamily: 'sans-serif',
-                    fontStyle: FontStyle.italic,
-                    fontSize: 9,
-                    color: _cream,
-                    letterSpacing: 0.2,
+                child: Text.rich(
+                  TextSpan(
+                    style: TextStyle(
+                      fontFamily: 'sans-serif',
+                      fontSize: 9,
+                      color: _cream,
+                      letterSpacing: 0.2,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: 'Powered by',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(text: ': Elle and Lorelei'),
+                    ],
                   ),
                 ),
               ),
