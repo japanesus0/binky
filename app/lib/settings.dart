@@ -87,9 +87,15 @@ class Settings {
       'dark' => ThemeMode.dark,
       _ => ThemeMode.system,
     };
+    // Kettle time. Clamp to the slider's current range (1–15) on load
+    // — if a tester persisted a higher value under the old 1–30 slider,
+    // a raw read would feed an out-of-range value into the Slider widget
+    // and trip its asserts. Bad / missing values fall back to the
+    // default 5 min (one electric kettle to boil).
     final kettleStr = await SecureStore.getString(_kettleKey);
+    final parsedKettle = kettleStr != null ? int.tryParse(kettleStr) : null;
     kettleMinutesNotifier.value =
-        (kettleStr != null ? int.tryParse(kettleStr) : null) ?? 5;
+        (parsedKettle != null) ? parsedKettle.clamp(1, 15) : 5;
 
     final keepScreenStr = await SecureStore.getString(_keepScreenOnKey);
     // Default OFF on fresh installs (security: don't suppress the lock
@@ -129,7 +135,12 @@ class Settings {
   }
 
   static Future<void> setKettleMinutes(int minutes) async {
-    final clamped = minutes.clamp(1, 30);
+    // Clamp must match the slider's max (currently 15). Any persisted
+    // values above 15 from earlier closed-test builds get clamped down
+    // on next save — a minor regression for the ~0 users who had it
+    // above 15 anyway. The notifier itself is loaded with the same
+    // ceiling so the slider can't be initialized off-scale.
+    final clamped = minutes.clamp(1, 15);
     await SecureStore.setString(_kettleKey, clamped.toString());
     kettleMinutesNotifier.value = clamped;
   }
@@ -309,11 +320,18 @@ class SettingsScreen extends StatelessWidget {
                             style: Theme.of(context).textTheme.titleMedium),
                       ],
                     ),
+                    // Range 1–15 min covers every realistic household kettle
+                    // scenario (electric: 2–5 min, gas stovetop: 4–7 min,
+                    // weak burner with 3 L: 10–15 min). Anything longer is
+                    // truly fringe (samovars, solar kettles, etc.) and is
+                    // better served by the brew timer's custom duration
+                    // than by stretching this slider to a 30-stop throw
+                    // that's hard to land precisely.
                     Slider(
                       value: minutes.toDouble(),
                       min: 1,
-                      max: 30,
-                      divisions: 29,
+                      max: 15,
+                      divisions: 14,
                       label: '$minutes min',
                       onChanged: (v) =>
                           Settings.setKettleMinutes(v.round()),
