@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'active_brew.dart';
+import 'alarm.dart';
 import 'diagnostics.dart';
 import 'drinks_editor.dart';
 import 'history.dart';
@@ -72,6 +73,28 @@ void main() async {
   await DrinksStore.load();
   await ActiveBrew.load();
 
+  // Orphan-notification sweep. When the app starts and there's no
+  // active brew, any completion notifications still queued in
+  // Android's AlarmManager are stale — either from a crash, a
+  // force-kill, an OEM battery manager killing the foreground service
+  // before stop()/complete() could run, or any other failure mode we
+  // haven't enumerated. Sweep them so they can't fire hours later.
+  //
+  // This closes the "woke up at 3 AM" loophole: the previous evening's
+  // brew finished normally (foreground service played audio, user
+  // never came back to tap Done), but the queued OS notification was
+  // Doze-deferred and fired at the next maintenance window in the
+  // early morning. With this sweep, even if the user opens the app
+  // overnight before the rogue ding, the queue gets cleared.
+  //
+  // Also log the count of pending notifications at startup — gives
+  // future debugging a clear baseline ("at app launch, N pending").
+  await Alarm.logPendingNotifications('startup');
+  if (ActiveBrew.current == null) {
+    await Alarm.cancelScheduledCompletion();
+    Diagnostics.log('startup: orphan sweep (no active brew on load)');
+  }
+
   runApp(const BinkyApp());
 }
 
@@ -79,6 +102,15 @@ void _onForegroundTaskData(Object data) {
   if (data == 'brew_expired') {
     Diagnostics.log('main: received brew_expired from foreground service');
     ActiveBrew.markExpiryHandledByService();
+    // The service already played the alert audio for this brew. The
+    // OS-scheduled completion notifications for this same expiry are
+    // therefore redundant — and worse, if Doze defers them past the
+    // expiry time, they fire as a rogue ding hours later (the original
+    // "woke up at 3 AM" report). Cancel them now while we know the
+    // service handled the alert successfully. Fire-and-forget — the
+    // notification queue sweep is best-effort and shouldn't block the
+    // expiry signal.
+    Alarm.cancelScheduledCompletion();
   } else if (data == 'brew_expired_main_will_alert') {
     // Service noticed expiry but deferred audio because main is resumed
     // and will fire the in-app ding itself. Purely informational — no
