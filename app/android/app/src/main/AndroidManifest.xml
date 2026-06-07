@@ -8,12 +8,21 @@
            keeps our Dart isolate alive while a brew is running so the
            brew-complete sound fires even with the device locked. Audio
            playback is the service's defined purpose, satisfying
-           Android 14's foreground-service-type requirement. -->
+           Android 14's foreground-service-type requirement.
+         * USE_EXACT_ALARM — fires brew-completion alarms at the EXACT
+           scheduled second instead of letting Doze defer them by hours.
+           Google's "exact alarm" policy carves out timer/alarm-clock apps
+           explicitly; binky's primary purpose is a brew timer, which
+           qualifies. Without this, the inexact alarms can be deferred to
+           the next Doze maintenance window — which on idle phones tends
+           to land in the 1–5 AM range, producing the rogue overnight
+           ding bug. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
 
     <application
         android:label="binky"

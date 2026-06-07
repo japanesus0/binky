@@ -330,7 +330,17 @@ class Alarm {
               enableVibration: true,
             ),
           ),
-          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          // Exact scheduling: fires at the actual scheduled second
+          // instead of letting Doze defer the alarm to the next
+          // maintenance window. Requires USE_EXACT_ALARM in
+          // AndroidManifest.xml (carved out by Play policy for timer
+          // apps — binky qualifies). Without exact, Doze on idle
+          // devices was deferring overnight alarms to 1–5 AM — the
+          // rogue "woke up at 3 AM" ding. The AllowWhileIdle suffix
+          // lets the alarm fire even when the device is in Doze
+          // (otherwise even an "exact" alarm would be delayed until
+          // the device left Doze on its own schedule).
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
           uiLocalNotificationDateInterpretation:
               UILocalNotificationDateInterpretation.absoluteTime,
         );
@@ -376,6 +386,30 @@ class Alarm {
       Diagnostics.log('test OS notification posted (id=$_completionNotificationId)');
     } catch (e) {
       Diagnostics.log('test OS notification FAILED: $e');
+    }
+  }
+
+  /// Diagnostic helper: log the count of currently-pending OS
+  /// notifications queued by our plugin, with the [tag] identifying the
+  /// call site (e.g. "startup", "post-cancel"). Best-effort; failure to
+  /// query is non-fatal and just skips the log. Useful for investigating
+  /// "did binky's queue have something scheduled overnight?" — open the
+  /// app and the startup line tells you immediately. Listing the pending
+  /// ids inline keeps the log self-contained (no separate viewer needed
+  /// for the basic question).
+  static Future<void> logPendingNotifications(String tag) async {
+    try {
+      await _ensureOsInit();
+      final pending = await _plugin.pendingNotificationRequests();
+      if (pending.isEmpty) {
+        Diagnostics.log('pending OS notifs [$tag]: 0');
+      } else {
+        final ids = pending.map((p) => p.id).toList()..sort();
+        Diagnostics.log(
+            'pending OS notifs [$tag]: ${pending.length} (ids=$ids)');
+      }
+    } catch (e) {
+      Diagnostics.log('pending OS notifs [$tag]: query FAILED: $e');
     }
   }
 
