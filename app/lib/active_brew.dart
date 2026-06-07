@@ -329,6 +329,16 @@ class ActiveBrew {
           DateTime.now().difference(state.endsAt).inMinutes;
       if (ageSinceExpiry > 60) {
         await SecureStore.remove(_key);
+        // Sweep any OS notifications that were scheduled for this
+        // abandoned brew. Without this, a stale notification could
+        // still be queued in Android's AlarmManager and fire whenever
+        // Doze releases it (often early morning) — the rogue overnight
+        // ding bug. main.dart's startup sweep also catches this case,
+        // but doing it here keeps the cleanup local to the discard.
+        await Alarm.cancelScheduledCompletion();
+        Diagnostics.log(
+            'ActiveBrew.load: discarded stale brew '
+            '(${ageSinceExpiry}m past expiry), swept OS notifs');
         return;
       }
       activeBrewNotifier.value = state;
