@@ -1,6 +1,7 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'diagnostics.dart';
 
 /// Entry point for the foreground-service isolate.
 ///
@@ -34,6 +35,21 @@ class BrewServiceKeys {
   /// ValueNotifier in this isolate — the service runs in its own Dart
   /// isolate with no shared memory.
   static const String alertRepetitions = 'brew_alert_repetitions';
+
+  /// Persists across foreground-service restarts: when true, the
+  /// service's _fireExpiry has already run for this brew and the
+  /// service must NOT fire it again, even if Android auto-restarts the
+  /// service for memory reasons. Without this, the instance-scoped
+  /// `_expiryFired` bool resets to false on every fresh handler — and
+  /// since the service is configured START_STICKY by flutter_foreground_task,
+  /// Android revives it after OOM-kills. A revived handler with
+  /// _endsAt in the past would re-fire the audio (the 3 AM ding bug
+  /// that survived the +24 OS-notification cancellation work).
+  ///
+  /// Reset via `removeData` when a new brew starts (see ActiveBrew.
+  /// _startBrewService) — the next brew must be allowed to fire even
+  /// after a previous one set this true.
+  static const String expiryFired = 'brew_expiry_fired';
 }
 
 /// Runs in a SEPARATE isolate from the rest of the app. Cannot access
@@ -64,6 +80,24 @@ class BrewTaskHandler extends TaskHandler {
     if (storedReps != null) {
       _alertReps = storedReps.clamp(1, 10);
     }
+    // Hydrate the persisted expiry-fired flag so an Android-initiated
+    // service restart (START_STICKY revival after OOM-kill) doesn't
+    // re-fire the alert. The flag is written by [_fireExpiry] and
+    // cleared by the main isolate when a new brew starts.
+    _expiryFired = await FlutterForegroundTask.getData<bool>(
+            key: BrewServiceKeys.expiryFired) ??
+        false;
+
+    // Visibility: log every onStart to the persistent log so service
+    // restarts are obvious in next session's diagnostics. starter.name
+    // tells us "developer" (we started it cleanly via startService) vs
+    // "system" (Android revived a killed instance). A system-starter
+    // entry alongside expiryFired=true is the smoking-gun pattern for
+    // "Android tried to refire but we blocked it correctly."
+    await Diagnostics.appendToFile(
+        'service onStart: starter=${starter.name} '
+        'endsAt=${_endsAt?.toIso8601String() ?? "null"} '
+        'expiryFired=$_expiryFired alertReps=$_alertReps');
   }
 
   @override
@@ -76,6 +110,16 @@ class BrewTaskHandler extends TaskHandler {
   }
 
   Future<void> _fireExpiry() async {
+    // Persist the expiry-fired flag IMMEDIATELY so an Android-initiated
+    // service restart between now and the end of the rep loop can't
+    // re-enter _fireExpiry on the revived instance. Fire-and-forget —
+    // saveData failure is non-fatal (the self-stop at the end of this
+    // method is the primary defense; persistence is belt-and-braces).
+    FlutterForegroundTask.saveData(
+      key: BrewServiceKeys.expiryFired,
+      value: true,
+    );
+
     // Is the main isolate currently resumed in the foreground? If so, its
     // banner / TimerScreen tickers will call ActiveBrew.handleExpiry and
     // fire audio + haptics themselves — we must NOT duplicate that here.
@@ -164,14 +208,37 @@ class BrewTaskHandler extends TaskHandler {
       }
     }
 
-    // Update the foreground notification text + stop the service.
+    // Update the foreground notification text so a user glancing at the
+    // shade sees "Brew complete" rather than the in-progress text.
     FlutterForegroundTask.updateService(
       notificationTitle: 'Brew complete',
       notificationText: 'Tap to return to the app.',
     );
-    // Note: we don't auto-stop the service here. The main isolate stops
-    // it when the user taps Done/Cancel (via ActiveBrew.stop/complete).
-    // Leaving the service alive keeps the "complete" notification visible.
+
+    // Brief grace period before self-stop: gives the user a window to
+    // tap the "Brew complete" notification if they happen to be looking
+    // at the shade. After self-stop the notification disappears, but
+    // by then the alert audio has played its role and the in-app banner
+    // ("Ready — tap to finish") is the primary way back into the brew.
+    await Diagnostics.appendToFile(
+        'service _fireExpiry: alert loop done, stopping service in 8s');
+    await Future.delayed(const Duration(seconds: 8));
+
+    // Self-stop. A cleanly-stopped foreground service is NOT auto-
+    // restarted by Android — only OOM-kills trigger flutter_foreground_task's
+    // START_STICKY revival. Self-stopping eliminates the "Android revives
+    // the service hours later and the fresh handler re-fires _fireExpiry"
+    // vector that produced the 3 AM ding even with the +24 OS-notification
+    // cancellation work. The persisted [BrewServiceKeys.expiryFired] flag
+    // is the secondary defense in case stopService itself races or fails.
+    try {
+      await FlutterForegroundTask.stopService();
+      await Diagnostics.appendToFile(
+          'service _fireExpiry: stopService returned');
+    } catch (e) {
+      await Diagnostics.appendToFile(
+          'service _fireExpiry: stopService FAILED: $e');
+    }
   }
 
   @override
