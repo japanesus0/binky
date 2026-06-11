@@ -194,6 +194,14 @@ class ActiveBrew {
         key: BrewServiceKeys.alertRepetitions,
         value: alertRepetitionsNotifier.value.clamp(1, 10),
       );
+      // Clear any persisted expiry-fired flag from a previous brew.
+      // Without this reset, a fresh brew would inherit the flag and
+      // its service would treat expiry as already-fired — the audio
+      // would never play. The service's own _fireExpiry re-sets the
+      // flag once it actually fires for THIS brew.
+      await FlutterForegroundTask.removeData(
+        key: BrewServiceKeys.expiryFired,
+      );
       final endTimeLabel =
           '${endsAt.hour.toString().padLeft(2, '0')}:${endsAt.minute.toString().padLeft(2, '0')}';
       final running = await FlutterForegroundTask.isRunningService;
@@ -336,9 +344,16 @@ class ActiveBrew {
         // ding bug. main.dart's startup sweep also catches this case,
         // but doing it here keeps the cleanup local to the discard.
         await Alarm.cancelScheduledCompletion();
+        // Also kill any lingering foreground service so an Android-
+        // initiated revival of a stale brew's service can't re-fire
+        // _fireExpiry once we've already declared the brew abandoned.
+        // The service should normally self-stop after its rep loop,
+        // but this is the catch-all for any path that left it alive
+        // (e.g. service was killed mid-rep-loop before stopService ran).
+        await _stopBrewService();
         Diagnostics.log(
             'ActiveBrew.load: discarded stale brew '
-            '(${ageSinceExpiry}m past expiry), swept OS notifs');
+            '(${ageSinceExpiry}m past expiry), swept OS notifs + service');
         return;
       }
       activeBrewNotifier.value = state;
