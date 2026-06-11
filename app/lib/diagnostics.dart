@@ -134,6 +134,30 @@ class Diagnostics {
     }
   }
 
+  /// Append a single entry to the persistent log file directly, WITHOUT
+  /// touching the in-memory ring buffer. Used by the brew foreground-
+  /// service, which runs in a separate Dart isolate and so has its own
+  /// copy of the static [entries] / [_logFile] state — calling [log]
+  /// from the service would write to a different in-memory list that
+  /// the UI can't see. Appending straight to the file means the entry
+  /// surfaces in the UI on the next main-isolate session that reads
+  /// the file via [init]. Best-effort; failures are silent.
+  ///
+  /// Format matches [DiagEntry._toLine] so [DiagEntry._tryParseLine]
+  /// rehydrates the entry like any other.
+  static Future<void> appendToFile(String message) async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final f = File('${dir.path}/$_logFileName');
+      final entry = DiagEntry(DateTime.now(), message);
+      await f.writeAsString(
+        '${entry._toLine()}\n',
+        mode: FileMode.append,
+        flush: true,
+      );
+    } catch (_) {/* best effort */}
+  }
+
   /// Empty both in-memory and on-disk logs. Used by the Clear button in
   /// the Diagnostics UI.
   static Future<void> clear() async {
