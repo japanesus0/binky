@@ -197,8 +197,62 @@ class _ClearLogButton extends StatelessWidget {
   }
 }
 
-class DiagnosticsScreen extends StatelessWidget {
+class DiagnosticsScreen extends StatefulWidget {
   const DiagnosticsScreen({super.key});
+
+  @override
+  State<DiagnosticsScreen> createState() => _DiagnosticsScreenState();
+}
+
+class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
+  final ScrollController _scrollController = ScrollController();
+  // Tracks whether the user has manually scrolled away from the bottom.
+  // Auto-scroll-on-new-entry only kicks in while the user is at (or near)
+  // the bottom, so reading older entries isn't interrupted by an
+  // unexpected jump.
+  bool _stickyToBottom = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Listen to the entries notifier so the screen can re-anchor to the
+    // bottom whenever a new entry arrives — but only when the user is
+    // currently looking at the bottom (sticky mode). The ValueListenableBuilder
+    // below handles redraws; this callback just nudges the scroll.
+    Diagnostics.entries.addListener(_onEntriesChanged);
+    // Initial jump to the bottom so the latest entry is visible the
+    // instant the screen opens.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom());
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    // Within 24 logical px of the bottom counts as "at bottom" so a
+    // pixel-imperfect rest position doesn't break sticky mode.
+    final atBottom = pos.maxScrollExtent - pos.pixels < 24;
+    if (atBottom != _stickyToBottom) {
+      _stickyToBottom = atBottom;
+    }
+  }
+
+  void _onEntriesChanged() {
+    if (!_stickyToBottom) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom());
+  }
+
+  void _jumpToBottom() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+  }
+
+  @override
+  void dispose() {
+    Diagnostics.entries.removeListener(_onEntriesChanged);
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -241,10 +295,17 @@ class DiagnosticsScreen extends StatelessWidget {
               ),
             );
           }
+          // Chronological top-to-bottom (oldest at top, newest at bottom)
+          // — matches the clipboard format the Copy button produces, so
+          // what you see on screen and what you paste into a bug report
+          // share the same order. The initial scroll position lands at
+          // the bottom so the latest entry is what you see first; sticky
+          // tracking keeps you pinned to the latest as new entries come
+          // in while you're watching, but stops following the moment you
+          // scroll up to read older context.
           return ListView.builder(
+            controller: _scrollController,
             itemCount: items.length,
-            // Newest first.
-            reverse: true,
             itemBuilder: (context, i) {
               final e = items[i];
               return Padding(
