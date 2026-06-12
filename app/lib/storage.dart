@@ -187,6 +187,16 @@ class Drink {
   final List<int> brewTimes;
   final bool isDefault;       // pre-selected sub-type within its category
 
+  /// Optional free-text brew temperature note shown alongside volume and
+  /// brew time on the drink tile (e.g. "175°F", "boiling", "70°C off the
+  /// boil 30s"). Free-text rather than structured because brewing
+  /// guidance varies — some users want a specific number, others want
+  /// "rolling boil" or a recipe note. Only meaningful when [brewable]
+  /// is true; the editor hides the field for non-brewable drinks.
+  /// Nullable so existing drinks loaded from pre-temp installs display
+  /// nothing rather than "null" or an empty separator.
+  final String? brewTemp;
+
   const Drink({
     required this.id,
     required this.type,
@@ -195,6 +205,7 @@ class Drink {
     required this.brewable,
     required this.brewTimes,
     this.isDefault = false,
+    this.brewTemp,
   });
 
   /// First entry of [volumePresets], or 16 oz as a defensive fallback if
@@ -205,6 +216,23 @@ class Drink {
   double get defaultVolume =>
       volumePresets.isNotEmpty ? volumePresets.first : 16.0;
 
+  /// Single source of truth for the metadata strip shown under a drink's
+  /// name in both the drinks editor and the category screen. Composes
+  /// "{volume} oz · brew {a/b/c} min · {temp}" with " · " separators
+  /// between present segments — a non-brewable drink with no temp shows
+  /// just the volume. Brew time and temp are gated on [brewable] so a
+  /// drink toggled out of brewable mode hides those segments without
+  /// the editor needing to clear them.
+  String get metadataSubtitle {
+    final parts = <String>[
+      '${defaultVolume.toStringAsFixed(0)} oz',
+      if (brewable && brewTimes.isNotEmpty)
+        'brew ${brewTimes.join("/")} min',
+      if (brewable && brewTemp != null && brewTemp!.isNotEmpty) brewTemp!,
+    ];
+    return parts.join(' · ');
+  }
+
   Drink copyWith({
     int? id,
     String? type,
@@ -213,6 +241,7 @@ class Drink {
     bool? brewable,
     List<int>? brewTimes,
     bool? isDefault,
+    String? brewTemp,
   }) =>
       Drink(
         id: id ?? this.id,
@@ -222,6 +251,7 @@ class Drink {
         brewable: brewable ?? this.brewable,
         brewTimes: brewTimes ?? this.brewTimes,
         isDefault: isDefault ?? this.isDefault,
+        brewTemp: brewTemp ?? this.brewTemp,
       );
 
   Map<String, dynamic> toJson() => {
@@ -232,6 +262,9 @@ class Drink {
         'brew': brewable,
         'times': brewTimes,
         'def': isDefault,
+        // Only serialize a non-null temp — keeps the JSON clean for the
+        // common (pre-temp) case and avoids storing "null" entries.
+        if (brewTemp != null && brewTemp!.isNotEmpty) 'temp': brewTemp,
       };
 
   factory Drink.fromJson(Map<String, dynamic> j) {
@@ -247,6 +280,12 @@ class Drink {
     } else {
       vols = const [16.0];
     }
+    // brewTemp absent for pre-temp drinks (no migration needed — nullable
+    // field, missing key → null → not displayed).
+    final tempRaw = j['temp'] as String?;
+    final temp = (tempRaw != null && tempRaw.trim().isNotEmpty)
+        ? tempRaw.trim()
+        : null;
     return Drink(
       id: j['id'] as int,
       type: j['type'] as String,
@@ -255,6 +294,7 @@ class Drink {
       brewable: j['brew'] as bool,
       brewTimes: (j['times'] as List).cast<int>(),
       isDefault: (j['def'] as bool?) ?? false,
+      brewTemp: temp,
     );
   }
 }
@@ -267,30 +307,38 @@ class Drink {
 // bitter), earl grey is the classic 5-minute black tea, ginger and herbal
 // medicinal teas (Breathe Easy) benefit from longer steeps.
 const _seedDrinks = <Drink>[
-  // Hot Tea
+  // Hot Tea — brew temps reflect conventional guidance: greens lower
+  // (~175°F so the catechins don't go bitter), blacks and herbals at a
+  // rolling boil. Users can edit per-drink in the editor.
   Drink(id: 1, type: 'Hot Tea', description: 'Ginger',
-      volumePresets: [16, 12, 20], brewable: true, brewTimes: [5, 7, 10]),
+      volumePresets: [16, 12, 20], brewable: true, brewTimes: [5, 7, 10],
+      brewTemp: 'Boiling'),
   Drink(id: 2, type: 'Hot Tea', description: 'Green Tea',
       volumePresets: [12, 16, 8], brewable: true, brewTimes: [2, 3, 4],
-      isDefault: true),
+      isDefault: true, brewTemp: '175°F'),
   Drink(id: 3, type: 'Hot Tea', description: 'Earl Grey',
-      volumePresets: [16, 12, 20], brewable: true, brewTimes: [4, 5, 6]),
+      volumePresets: [16, 12, 20], brewable: true, brewTimes: [4, 5, 6],
+      brewTemp: '200°F'),
   Drink(id: 4, type: 'Hot Tea', description: 'Breathe Easy',
-      volumePresets: [16, 12, 20], brewable: true, brewTimes: [5, 7, 10]),
-  // Cold Tea
+      volumePresets: [16, 12, 20], brewable: true, brewTimes: [5, 7, 10],
+      brewTemp: 'Boiling'),
+  // Cold Tea — non-brewable, no temp.
   Drink(id: 5, type: 'Cold Tea', description: 'Triple Berry',
       volumePresets: [20, 16, 24], brewable: false, brewTimes: [],
       isDefault: true),
   Drink(id: 6, type: 'Cold Tea', description: 'Iced Tea',
       volumePresets: [20, 16, 24], brewable: false, brewTimes: []),
-  // Coffee
+  // Coffee — pour-over / drip range, 195–205°F depending on grind and
+  // method. 200°F is a sensible mid-range default.
   Drink(id: 7, type: 'Coffee', description: 'Black',
-      volumePresets: [16, 12, 8], brewable: true, brewTimes: [1, 2, 3]),
+      volumePresets: [16, 12, 8], brewable: true, brewTimes: [1, 2, 3],
+      brewTemp: '200°F'),
   Drink(id: 8, type: 'Coffee', description: 'Cream',
-      volumePresets: [16, 12, 8], brewable: true, brewTimes: [1, 2, 3]),
+      volumePresets: [16, 12, 8], brewable: true, brewTimes: [1, 2, 3],
+      brewTemp: '200°F'),
   Drink(id: 9, type: 'Coffee', description: 'Cream & Sugar',
       volumePresets: [16, 12, 8], brewable: true, brewTimes: [1, 2, 3],
-      isDefault: true),
+      isDefault: true, brewTemp: '200°F'),
   // Soda
   Drink(id: 10, type: 'Soda', description: 'Diet Coke',
       volumePresets: [12, 16, 20], brewable: false, brewTimes: []),

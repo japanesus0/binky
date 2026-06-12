@@ -175,10 +175,7 @@ class DrinksEditorScreen extends StatelessWidget {
             ? const Icon(Icons.star, color: Colors.amber)
             : const Icon(Icons.star_border, color: Colors.transparent),
         title: Text(d.description),
-        subtitle: Text(
-          '${d.defaultVolume.toStringAsFixed(0)} oz'
-          '${d.brewable && d.brewTimes.isNotEmpty ? ' · brew ${d.brewTimes.join("/")} min' : ''}',
-        ),
+        subtitle: Text(d.metadataSubtitle),
         trailing: const Icon(Icons.edit_outlined),
         onTap: () => _edit(context, d),
       ),
@@ -245,6 +242,7 @@ class _DrinkFormScreenState extends State<_DrinkFormScreen> {
   late final TextEditingController _description;
   late final TextEditingController _volume;
   late final TextEditingController _brewTimes;
+  late final TextEditingController _brewTemp;
   late bool _brewable;
   late bool _isDefault;
 
@@ -268,6 +266,7 @@ class _DrinkFormScreenState extends State<_DrinkFormScreen> {
           ? (catDef?.defaultBrewTimes ?? const <int>[]).join(',')
           : d.brewTimes.join(','),
     );
+    _brewTemp = TextEditingController(text: d?.brewTemp ?? '');
     _brewable = d?.brewable ?? catDef?.brewable ?? false;
     _isDefault = d?.isDefault ?? false;
   }
@@ -277,6 +276,7 @@ class _DrinkFormScreenState extends State<_DrinkFormScreen> {
     _description.dispose();
     _volume.dispose();
     _brewTimes.dispose();
+    _brewTemp.dispose();
     super.dispose();
   }
 
@@ -336,6 +336,11 @@ class _DrinkFormScreenState extends State<_DrinkFormScreen> {
             .toList()
         : <int>[];
     final id = widget.drink?.id ?? DrinksStore.nextId();
+    // Brew temp only meaningful for brewable drinks; clear it otherwise
+    // so a drink toggled from brewable=true to false doesn't leave a
+    // stale temp in the JSON.
+    final tempText = _brewTemp.text.trim();
+    final temp = (_brewable && tempText.isNotEmpty) ? tempText : null;
     Navigator.pop(
       context,
       _DrinkFormResult.saved(Drink(
@@ -346,6 +351,7 @@ class _DrinkFormScreenState extends State<_DrinkFormScreen> {
         brewable: _brewable,
         brewTimes: times,
         isDefault: _isDefault,
+        brewTemp: temp,
       )),
     );
   }
@@ -463,6 +469,17 @@ class _DrinkFormScreenState extends State<_DrinkFormScreen> {
                 decoration: const InputDecoration(
                   labelText: 'Brew presets (minutes, comma-separated)',
                   hintText: '3, 5, 7',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _brewTemp,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  labelText: 'Brew temperature (optional)',
+                  hintText: '175°F, Boiling, 70°C off the boil 30s',
+                  helperText: 'Free-text — shown on the drink tile.',
                   border: OutlineInputBorder(),
                 ),
               ),

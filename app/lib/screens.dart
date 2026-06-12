@@ -76,10 +76,10 @@ class CategoryScreen extends StatelessWidget {
                       ? const Icon(Icons.star, color: Colors.amber)
                       : const Icon(Icons.star_border, color: Colors.transparent),
                   title: Text(d.description),
-                  subtitle: Text(
-                    '${d.defaultVolume.toStringAsFixed(0)} oz'
-                    '${d.brewable && d.brewTimes.isNotEmpty ? ' · brew ${d.brewTimes.join("/")} min' : ''}',
-                  ),
+                  // Subtitle composes volume + brew time + brew temp via
+                  // Drink.metadataSubtitle — same strip the drinks editor
+                  // uses, so users see the same metadata in both places.
+                  subtitle: Text(d.metadataSubtitle),
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => DrinkScreen(drink: d)),
