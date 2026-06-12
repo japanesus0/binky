@@ -125,6 +125,36 @@ class _SplashScreenState extends State<SplashScreen>
                       letterSpacing: 2,
                     ),
                   ),
+                  const SizedBox(height: 28),
+                  // Brand tagline. Light italic serif, two lines centered.
+                  // Sets the product philosophy ("don't watch the clock,
+                  // we'll signal you") before the home screen takes over.
+                  // The em-dash break is explicit rather than auto-wrap
+                  // so the line break lands on the rhetorical pause
+                  // regardless of screen width.
+                  //
+                  // PLACEHOLDER: the wording, weight, and overall splash
+                  // composition are pre-designer-engagement. The graphics
+                  // artist working on the launcher icon and feature
+                  // graphic is expected to revisit this layout — keep
+                  // typography choices flexible (no embedded SVGs, no
+                  // pixel-fitted artwork) so a redesign is a straight
+                  // text/style edit rather than a structural rewrite.
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 32),
+                    child: Text(
+                      'Tea time should be free of distraction\n'
+                      '— we\'ll tell you when to enjoy.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'serif',
+                        fontStyle: FontStyle.italic,
+                        fontSize: 15,
+                        color: _cream,
+                        height: 1.45,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
