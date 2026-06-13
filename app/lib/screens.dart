@@ -440,6 +440,33 @@ class _DrinkScreenState extends State<DrinkScreen> {
                 ],
               ),
               const SizedBox(height: 16),
+              // Brew temperature — read-only at this stage. The drink
+              // carries a free-text temp configured in the drinks editor
+              // (e.g. "175°F", "Boiling"); we surface it here at the
+              // "ready to brew" moment as a reminder, without making it
+              // editable per-session. Editing + logging the actual temp
+              // used is a deferred feature; this read-only display is
+              // the deliberately-minimal first step.
+              if (d.brewTemp != null && d.brewTemp!.isNotEmpty) ...[
+                Text('Brew temperature',
+                    style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.thermostat_outlined,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      d.brewTemp!,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
             ],
             TextField(
               controller: _notes,
