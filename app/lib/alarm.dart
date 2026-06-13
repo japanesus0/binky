@@ -250,11 +250,41 @@ class Alarm {
   /// Base id for scheduled completion notifications. The N-repetition
   /// scheduler fans out across ids [_completionNotificationId ..
   /// _completionNotificationId + _maxAlertReps - 1] — one per ding,
-  /// each scheduled 1 second after the previous. Cancellation sweeps
-  /// the whole range so changes to the reps setting between brews
-  /// can't leave stale alerts queued under higher indices.
+  /// spaced [_backupRepSpacing] apart. Cancellation sweeps the whole
+  /// range so changes to the reps setting between brews can't leave
+  /// stale alerts queued under higher indices.
   static const int _completionNotificationId = 9001;
   static const int _maxAlertReps = 10;
+
+  /// Offset between brew expiry and the FIRST OS backup notification.
+  ///
+  /// The OS stack is the BACKUP layer — at expiry the primary alert is
+  /// the foreground service (locked/backgrounded) or the in-app path
+  /// (resumed), both of which cancel this stack right after alerting.
+  /// Scheduling the stack at exactly T raced that cancel: with exact
+  /// alarms the first notification rang at T, ~300ms before the
+  /// post-alert cancel arrived — an audible double ding. At T+20s the
+  /// cancel wins by a wide margin whenever the primary path worked;
+  /// when it didn't (service OOM-killed mid-brew and never revived), a
+  /// 20-second-late backup ding is well within tolerance for a brew.
+  static const _backupDelay = Duration(seconds: 20);
+
+  /// Spacing between reps within the OS stack. Android rate-limits
+  /// notification sounds posted in quick succession on one channel —
+  /// at the previous 1-second spacing, devices commonly played only
+  /// the first rep's sound and silently swallowed the rest, making
+  /// reps > 1 a no-op on this path. 5 seconds sits comfortably past
+  /// the throttle window so every rep actually rings.
+  static const _backupRepSpacing = Duration(seconds: 5);
+
+  /// Latched true after the first exact-schedule failure so subsequent
+  /// schedules skip straight to inexact instead of paying the
+  /// exception on every rep. Relevant on Android 12 (API 31/32), where
+  /// exactness comes from SCHEDULE_EXACT_ALARM — granted by default
+  /// but revocable by the user under "Alarms & reminders" in special
+  /// app access. On 13+ USE_EXACT_ALARM is auto-granted and this
+  /// should never latch.
+  static bool _exactAlarmsUnavailable = false;
 
   static bool _osInitialized = false;
 
@@ -287,17 +317,18 @@ class Alarm {
     } catch (_) {/* best effort */}
   }
 
-  /// Schedule the OS-side completion notification(s) for [when]. Fans
-  /// out the user's repetitions setting (1–10) into a stack of
-  /// individual notifications, each 1 second after the previous. Each
-  /// rings the channel sound; the Android system groups stacked
-  /// entries in the shade. Idempotent within a single brew: cancel
-  /// before reschedule via [cancelScheduledCompletion] if you need to
-  /// rebuild the stack with new timing.
+  /// Schedule the OS-side BACKUP notification(s) for a brew expiring at
+  /// [when]. Fans out the user's repetitions setting (1–10) into a
+  /// stack of individual notifications starting at `when + 20s`,
+  /// spaced 5 s apart (see [_backupDelay] / [_backupRepSpacing] for
+  /// why those offsets). Each rings the channel sound; Android groups
+  /// stacked entries in the shade.
   ///
-  /// Inexact scheduling: no exact-alarm permission required, drift is
-  /// typically seconds (worst case ~15 min on heavily throttled
-  /// devices). Good enough for a brew timer.
+  /// These exist only for the case where BOTH primary alert paths are
+  /// dead at expiry (foreground service killed and not revived, app
+  /// process gone). Whenever a primary path fires, it cancels this
+  /// stack before the first entry is due. Idempotent within a single
+  /// brew: cancel via [cancelScheduledCompletion] before rescheduling.
   static Future<void> scheduleCompletion({
     required String title,
     required String body,
@@ -307,49 +338,83 @@ class Alarm {
       await _ensureOsInit();
       final reps = alertRepetitionsNotifier.value.clamp(1, _maxAlertReps);
       for (int i = 0; i < reps; i++) {
-        final repWhen = when.add(Duration(seconds: i));
+        final repWhen = when.add(_backupDelay + _backupRepSpacing * i);
         final tzWhen = tz.TZDateTime.fromMillisecondsSinceEpoch(
           tz.UTC,
           repWhen.toUtc().millisecondsSinceEpoch,
         );
+        await _scheduleOne(
+            _completionNotificationId + i, title, body, tzWhen);
+      }
+      Diagnostics.log(
+          'OS backup notifs scheduled from ${when.add(_backupDelay)} '
+          '($reps rep${reps == 1 ? '' : 's'}'
+          '${_exactAlarmsUnavailable ? ', inexact fallback' : ''})');
+    } catch (e) {
+      Diagnostics.log('OS notif schedule FAILED: $e');
+    }
+  }
+
+  /// Schedule a single notification, exact where the platform allows.
+  ///
+  /// Exact scheduling fires at the actual scheduled second instead of
+  /// letting Doze defer the alarm to the next maintenance window —
+  /// Doze deferral of overnight alarms to 1–5 AM was the original
+  /// rogue "woke up at 3 AM" ding. The AllowWhileIdle suffix lets the
+  /// alarm fire even while the device is dozing.
+  ///
+  /// Permission landscape: USE_EXACT_ALARM (manifest) is auto-granted
+  /// on Android 13+ but DOES NOT EXIST before API 33. Android 12
+  /// relies on SCHEDULE_EXACT_ALARM (also declared, maxSdkVersion 32)
+  /// — granted by default there but user-revocable. If exact
+  /// scheduling throws (revoked, OEM quirk), fall back to inexact for
+  /// this and all subsequent schedules: a backup notification that
+  /// may drift is strictly better than the pre-fix behavior of the
+  /// whole backup path silently dying in this catch.
+  static Future<void> _scheduleOne(
+      int id, String title, String body, tz.TZDateTime tzWhen) async {
+    const details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        _channelId,
+        _channelName,
+        channelDescription: _channelDesc,
+        importance: Importance.high,
+        priority: Priority.high,
+        category: AndroidNotificationCategory.reminder,
+        playSound: true,
+        sound: _channelSound,
+        enableVibration: true,
+      ),
+    );
+    if (!_exactAlarmsUnavailable) {
+      try {
         await _plugin.zonedSchedule(
-          _completionNotificationId + i,
+          id,
           title,
           body,
           tzWhen,
-          const NotificationDetails(
-            android: AndroidNotificationDetails(
-              _channelId,
-              _channelName,
-              channelDescription: _channelDesc,
-              importance: Importance.high,
-              priority: Priority.high,
-              category: AndroidNotificationCategory.reminder,
-              playSound: true,
-              sound: _channelSound,
-              enableVibration: true,
-            ),
-          ),
-          // Exact scheduling: fires at the actual scheduled second
-          // instead of letting Doze defer the alarm to the next
-          // maintenance window. Requires USE_EXACT_ALARM in
-          // AndroidManifest.xml (carved out by Play policy for timer
-          // apps — binky qualifies). Without exact, Doze on idle
-          // devices was deferring overnight alarms to 1–5 AM — the
-          // rogue "woke up at 3 AM" ding. The AllowWhileIdle suffix
-          // lets the alarm fire even when the device is in Doze
-          // (otherwise even an "exact" alarm would be delayed until
-          // the device left Doze on its own schedule).
+          details,
           androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
           uiLocalNotificationDateInterpretation:
               UILocalNotificationDateInterpretation.absoluteTime,
         );
+        return;
+      } on PlatformException catch (e) {
+        _exactAlarmsUnavailable = true;
+        Diagnostics.log(
+            'exact alarm unavailable (${e.code}) — falling back to inexact');
       }
-      Diagnostics.log(
-          'OS notif scheduled for $when ($reps rep${reps == 1 ? '' : 's'})');
-    } catch (e) {
-      Diagnostics.log('OS notif schedule FAILED: $e');
     }
+    await _plugin.zonedSchedule(
+      id,
+      title,
+      body,
+      tzWhen,
+      details,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+    );
   }
 
   /// Diagnostics: fires the completion notification immediately. Use this

@@ -16,13 +16,23 @@
            qualifies. Without this, the inexact alarms can be deferred to
            the next Doze maintenance window — which on idle phones tends
            to land in the 1–5 AM range, producing the rogue overnight
-           ding bug. -->
+           ding bug.
+         * SCHEDULE_EXACT_ALARM (maxSdkVersion 32) — USE_EXACT_ALARM does
+           not exist before API 33, so Android 12 (API 31/32) needs this
+           one for exact scheduling. Granted by default on 12, but the
+           user can revoke it under Special app access → Alarms &amp;
+           reminders; alarm.dart falls back to inexact scheduling when
+           exact throws, so revocation degrades timing instead of
+           silently killing the backup-notification path. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32"/>
 
     <application
         android:label="binky"
